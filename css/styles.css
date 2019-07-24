@@ -1,0 +1,11 @@
+.graph-component {
+  border: solid 1px black;
+  display: flex;
+  padding: 1.5em;
+}
+
+.graph-component svg {
+  background: #f7f7f7;
+  border: solid 2px #e7e7e7;
+  width: 100%;
+}
