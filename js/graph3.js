@@ -1,17 +1,25 @@
 ;(function() {
   const graph = document.querySelector("#graph-3 svg")
-  const DATA = [
-    [0, 0],
-    [1, 30],
-    [2, 15],
-    [3, 30],
-    [4, 10],
-    [5, 30],
-    [6, 10],
-    [7, 80],
-    [8, 40],
-    [9, 20]
-  ]
+
+  function randomData(length) {
+    const data = []
+
+    for (let i = 0; i < length; i++) {
+      data.push([i, 10 * Math.round(10 * Math.random())])
+    }
+
+    return data
+  }
+
+  const DATA = [randomData(10), randomData(10)]
+
+  setInterval(() => {
+    DATA.shift()
+
+    DATA.push(randomData(10))
+
+    pathTransition(DATA[0], DATA[1], 30)
+  }, 3000)
 
   function applyAttributes(target, attributes) {
     for (let attr in attributes) {
@@ -29,20 +37,22 @@
   }
 
   function pointsConverter(dimensions, padding, data) {
-    const width = dimensions[0] - padding[0]
-    const height = dimensions[1] - padding[1]
+    const width = dimensions[0] - padding[0] * 2
+    const height = dimensions[1] - padding[1] * 2
 
     const yData = data.map(d => d[1])
 
-    const min = Math.min(...yData)
+    const min = 0
     const max = Math.max(...yData)
 
     const yRatio = height / (max - min)
     const xRatio = width / (data.length - 1)
 
+    console.log(min, max, yData)
+
     return (x, y) => [
-      x * xRatio + padding[0] / 2,
-      height - y * yRatio + padding[1] / 2
+      x * xRatio + padding[0],
+      dimensions[1] - (y * yRatio + padding[1])
     ]
   }
 
@@ -88,22 +98,40 @@
   }
 
   function createPath(data, style) {
+    const path = document.createElementNS("http://www.w3.org/2000/svg", "path")
+
     const attributes = style
 
     attributes.d = calcPath(data)
-
-    const path = document.createElementNS("http://www.w3.org/2000/svg", "path")
 
     applyAttributes(path, attributes)
 
     return path
   }
 
+  function createRect(dimensions, paddingH, paddingV) {
+    const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect")
+
+    applyAttributes(rect, {
+      stroke: "red",
+      "stroke-width": "1",
+      x: paddingH,
+      y: paddingV,
+      fill: "none",
+      width: dimensions[0] - paddingH * 2,
+      height: dimensions[1] - paddingV * 2
+    })
+
+    graph.appendChild(rect)
+  }
+
   function init() {
     const dimensions = svgDimensions(graph)
-    const convert = pointsConverter(dimensions, [10, 50], DATA)
+    const convert = pointsConverter(dimensions, [10, 10], DATA[0])
 
-    const data = DATA.map(d => convert(...d))
+    createRect(dimensions, 10, 10)
+
+    const data = DATA[0].map(d => convert(...d))
 
     const path = createPath(data, {
       stroke: "blue",
@@ -115,4 +143,46 @@
   }
 
   init()
+
+  const dimensions = svgDimensions(graph)
+
+  function updatePath(dz) {
+    const paths = document.querySelector("#graph-3 svg path")
+
+    const convert2 = pointsConverter(dimensions, [10, 10], dz)
+
+    const data = dz.map(d => convert2(...d))
+
+    const d = calcPath(data)
+
+    paths.setAttribute("d", d)
+  }
+
+  function pathTransition(a1, a2, steps) {
+    const [startData, endData] = [[...a1], [...a2]]
+
+    const counterArray = endData.map((d, i) => (d[1] - startData[i][1]) / steps)
+
+    console.log(endData[0])
+
+    let counter = 0
+
+    updateTransition(startData)
+
+    function updateTransition(array) {
+      const outputData = array.map((d, i) => [d[0], d[1] + counterArray[i]])
+
+      setTimeout(() => {
+        counter++
+
+        if (counter === steps) {
+          updatePath(outputData.map(d => [d[0], Math.round(d[1])]))
+        } else {
+          updatePath(outputData)
+
+          return updateTransition(outputData)
+        }
+      }, 1000 / 60)
+    }
+  }
 })()
