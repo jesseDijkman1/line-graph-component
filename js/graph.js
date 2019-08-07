@@ -2,6 +2,44 @@
   const graph = document.getElementById("graph-1")
   const DIMENSIONS = svgDimensions(graph)
   const DATA = randomData(10)
+  const DATA2 = randomData(5)
+
+  function addData(_data, newData, preserveLength = false) {
+    const data = [..._data]
+    const newX = data[data.length - 1].x + 1
+
+    if (Array.isArray(newData)) {
+      newData.forEach((d, i) => {
+        data.push({ x: newX + i, y: d.y, id: newX + i })
+      })
+    } else if (typeof newData === "object") {
+      data.push({ x: newX, y: newData.y, id: newX })
+    } else if (typeof newData === "number") {
+      data.push({ x: newX, y: newData, id: newX })
+    } else {
+      return data
+    }
+
+    if (preserveLength) {
+      const addedAmount = data.length - _data.length
+
+      return data.map(d => {
+        const obj = Object.assign({}, d)
+        const yBase = data[addedAmount].y
+
+        if (d.x < addedAmount) {
+          obj.x = 0
+          obj.y = yBase
+        }
+
+        return obj
+      })
+    } else {
+      return data
+    }
+  }
+
+  const newerData = addData(DATA, DATA2, true)
 
   // Probably shouldn't be a global
   let convert = pointsConverter({
@@ -21,7 +59,6 @@
   function xAxis() {}
 
   function init() {
-    console.log(DATA)
     const path = createPath(DATA, {
       stroke: "blue",
       "stroke-width": 2,
@@ -55,7 +92,13 @@
   }
 
   setTimeout(() => {
-    pathTransition(DATA, randomData(12), 30)
+    const newData = [...DATA]
+    newData.push({ x: 10, y: 40, id: 10 })
+
+    console.log(DATA, newerData)
+
+    pathTransition(DATA, newerData, 30)
+    // pathTransition(DATA, randomData(50), 30)
   }, 1000)
 
   function applyAttributes(target, attributes) {
@@ -105,8 +148,6 @@
       obj.y =
         dimensions[1] -
         (obj.y * yRatio + (padding.length > 2 ? padding[2] : padding[0]))
-
-      console.log(obj)
 
       return obj
     }
@@ -235,7 +276,7 @@
     return oldData
   }
 
-  function pathTransition(_oldData, _newData, steps) {
+  function pathTransition(_oldData, _newData, steps = 10) {
     const oldData = equalize(_oldData, _newData)
     const newData = _newData
 
@@ -273,3 +314,65 @@
     }
   }
 })()
+
+// const DATA = randomData(10)
+// const DATA2 = randomData(5)
+
+// function randomData(length) {
+//   const data = []
+
+//   while (data.length < length) {
+//     data.push(
+//       formatData(data.length, 10 * Math.round(10 * Math.random()), data.length)
+//     )
+//   }
+
+//   return data
+// }
+
+// function formatData(_x, _y, _index) {
+//   return {
+//     x: _x,
+//     y: _y,
+//     id: _index
+//   }
+// }
+
+// function addData(_data, newData, preserveLength = false) {
+//   const data = [..._data]
+//   const newX = data[data.length - 1].x + 1
+
+//   if (Array.isArray(newData)) {
+//     newData.forEach((d, i) => {
+//       data.push({ x: newX + i, y: d.y, id: newX + i })
+//     })
+//   } else if (typeof newData === "object") {
+//     data.push({ x: newX, y: newData.y, id: newX })
+//   } else if (typeof newData === "number") {
+//     data.push({ x: newX, y: newData, id: newX })
+//   } else {
+//     return data
+//   }
+
+//   if (preserveLength) {
+//     const addedAmount = data.length - _data.length
+
+//     return data.map(d => {
+//       const obj = Object.assign({}, d)
+//       const yBase = data[addedAmount].y
+
+//       if (d.x < addedAmount) {
+//         obj.x = 0
+//         obj.y = yBase
+//       }
+
+//       return obj
+//     })
+//   } else {
+//     return data
+//   }
+// }
+
+// const newerData = addData(DATA, DATA2, true)
+
+// console.log(newerData)
