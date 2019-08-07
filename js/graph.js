@@ -10,37 +10,53 @@
     data: DATA
   })
 
+  function formatData(_x, _y, _index) {
+    return {
+      x: _x,
+      y: _y,
+      id: _index
+    }
+  }
+
+  function xAxis() {}
+
   function init() {
+    console.log(DATA)
     const path = createPath(DATA, {
       stroke: "blue",
       "stroke-width": 2,
       fill: "none"
     })
 
-    path.setAttribute("stroke", "green")
+    // const yAxis = createAxis({
+    //   min: 0,
+    //   max: Math.max(...DATA.map(d => d[1])),
+    //   lines: 5,
+    //   direction: "vertical"
+    // })
 
     graph.appendChild(path)
+    // graph.appendChild(xAxis)
+    // graph.appendChild(yAxis)
   }
 
   init()
 
   function randomData(length) {
-    const data = []
+    let data = []
 
     while (data.length < length) {
       data.push([data.length, 10 * Math.round(10 * Math.random())])
     }
 
+    data = data.map((d, i) => formatData(d[0], d[1], i))
+
     return data
   }
 
-  // setInterval(() => {
-  //   DATA.shift()
-
-  //   DATA.push(randomData(10))
-
-  //   pathTransition(DATA[0], DATA[1], 30)
-  // }, 3000)
+  setTimeout(() => {
+    pathTransition(DATA, randomData(12), 30)
+  }, 1000)
 
   function applyAttributes(target, attributes) {
     for (let attr in attributes) {
@@ -70,24 +86,35 @@
     const width = dimensions[0] - horizontalPadding
     const height = dimensions[1] - verticalPadding
 
-    const yData = data.map(d => d[1])
+    const yData = data.map(d => d.y)
+    const xData = data.map(d => d.x)
 
-    const min = 0
-    const max = Math.max(...yData)
+    const yMin = 0
+    const yMax = Math.max(...yData)
 
-    const yRatio = height / (max - min)
-    const xRatio = width / (data.length - 1)
+    const xMin = 0
+    const xMax = Math.max(...xData)
 
-    return (x, y) => [
-      x * xRatio + (padding.length > 2 ? padding[3] : padding[1]),
-      dimensions[1] -
-        (y * yRatio + (padding.length > 2 ? padding[2] : padding[0]))
-    ]
+    const yRatio = height / (yMax - yMin)
+    const xRatio = width / (xMax - xMin)
+
+    return function(_obj) {
+      const obj = Object.assign({}, _obj)
+
+      obj.x = obj.x * xRatio + (padding.length > 2 ? padding[3] : padding[1])
+      obj.y =
+        dimensions[1] -
+        (obj.y * yRatio + (padding.length > 2 ? padding[2] : padding[0]))
+
+      console.log(obj)
+
+      return obj
+    }
   }
 
   function lengthAngle(a, b, end) {
-    const xLength = b[0] - a[0]
-    const yLength = b[1] - a[1]
+    const xLength = b.x - a.x
+    const yLength = b.y - a.y
 
     return [
       Math.sqrt(Math.pow(xLength, 2) + Math.pow(yLength, 2)) * 0.15,
@@ -102,14 +129,28 @@
     const [length, angle] = lengthAngle(previous, next, end)
 
     return [
-      data[index][0] + Math.cos(angle) * length,
-      data[index][1] + Math.sin(angle) * length
+      data[index].x + Math.cos(angle) * length,
+      data[index].y + Math.sin(angle) * length
     ]
   }
 
   function calcPath(data) {
     return data.reduce((acc, d, i) => {
-      const [x, y] = d
+      const { x, y } = d
+
+      // const pp = document.createElementNS(
+      //   "http://www.w3.org/2000/svg",
+      //   "circle"
+      // )
+
+      // applyAttributes(pp, {
+      //   cx: x,
+      //   cy: y,
+      //   r: 3,
+      //   fill: "red"
+      // })
+
+      // graph.appendChild(pp)
 
       if (i === 0) {
         return `${acc}M${x} ${y}`
@@ -123,10 +164,11 @@
       }
     }, "")
   }
+
   function createPath(_data, style) {
     const path = document.createElementNS("http://www.w3.org/2000/svg", "path")
 
-    const data = _data.map(d => convert(...d)) // Convert the data into coordinates, based on the svg height and width
+    const data = _data.map(convert) // Convert the data into coordinates, based on the svg height and width
 
     const attributes = style
 
@@ -137,6 +179,7 @@
     return path
   }
 
+  // Just a function that shows the boundaries of the path, with a rectangle
   function createRect(dimensions, padding) {
     const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect")
 
@@ -157,37 +200,70 @@
     graph.appendChild(rect)
   }
 
-  const dimensions = svgDimensions(graph)
+  function updatePath(_data) {
+    const path = document.querySelector("#graph-1 path")
 
-  function updatePath(dz) {
-    const paths = document.querySelector("#graph-1 path")
+    convert = pointsConverter({
+      dimensions: DIMENSIONS,
+      padding: [10, 10],
+      data: _data
+    })
 
-    const convert2 = pointsConverter(dimensions, [10, 10], dz)
+    const data = _data.map(convert)
 
-    const data = dz.map(d => convert2(...d))
-
-    const d = calcPath(data)
-
-    paths.setAttribute("d", d)
+    path.setAttribute("d", calcPath(data))
   }
 
-  function pathTransition(a1, a2, steps) {
-    const [startData, endData] = [[...a1], [...a2]]
+  function equalize(..._data) {
+    const [oldData, newData] = _data
 
-    const counterArray = endData.map((d, i) => (d[1] - startData[i][1]) / steps)
+    let lastData = undefined
+
+    if (newData.length > oldData.length) {
+      newData.forEach((d, i) => {
+        if (!oldData[i]) {
+          if (!lastData) {
+            // lastX = newData[i - 1].x
+            lastData = newData[i - 1]
+          }
+
+          oldData.push({ x: lastData.x, y: lastData.y, id: i })
+        }
+      })
+    }
+
+    return oldData
+  }
+
+  function pathTransition(_oldData, _newData, steps) {
+    const oldData = equalize(_oldData, _newData)
+    const newData = _newData
+
+    const yCounter = newData.map((d, i) => (d.y - oldData[i].y) / steps)
+    const xCounter = newData.map((d, i) => (d.x - oldData[i].x) / steps)
 
     let counter = 0
 
-    updateTransition(startData)
+    updateTransition(oldData)
 
     function updateTransition(array) {
-      const outputData = array.map((d, i) => [d[0], d[1] + counterArray[i]])
+      const outputData = array.map((d, i) => {
+        return {
+          x: d.x + xCounter[i],
+          y: d.y + yCounter[i],
+          id: d.id
+        }
+      })
 
       setTimeout(() => {
         counter++
 
         if (counter === steps) {
-          updatePath(outputData.map(d => [d[0], Math.round(d[1])]))
+          outputData.forEach(d => {
+            d.x = Math.round(d.x)
+            d.y = Math.round(d.y)
+          })
+          updatePath(outputData)
         } else {
           updatePath(outputData)
 
