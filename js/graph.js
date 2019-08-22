@@ -1,8 +1,42 @@
 ;(function() {
   const graph = document.getElementById("graph-1")
-  const DIMENSIONS = svgDimensions(graph)
   const DATA = randomData(10)
-  const DATA2 = randomData(5)
+
+  // The styling for the graph
+  const styling = {
+    stroke: "blue",
+    "stroke-width": 2,
+    fill: "none"
+  }
+
+  // Set up the points converter, returns an object with the function "convert" and "update"
+  const converter = pointsConverter({
+    dimensions: svgDimensions(graph),
+    padding: [10, 10],
+    data: DATA
+  })
+
+  function init() {
+    const path = document.createElementNS("http://www.w3.org/2000/svg", "path")
+
+    const convertedData = DATA.map(converter.convert)
+
+    path.setAttribute("d", calcPath(convertedData))
+
+    // const path = createPath(convertedData, "curved")
+
+    // Set the styling for the path
+    // applyAttributes(path, styling)
+
+    graph.appendChild(path)
+
+    // Transition the graph into a new graph with new data
+    setTimeout(() => {
+      pathTransition(DATA, randomData(20), 30)
+    }, 1000)
+  }
+
+  init()
 
   function addData(_data, newData, preserveLength = false) {
     const data = [..._data]
@@ -29,7 +63,7 @@
 
         if (d.x < addedAmount) {
           obj.x = 0
-          obj.y = yBase
+          // obj.y = yBase
         }
 
         return obj
@@ -38,15 +72,6 @@
       return data
     }
   }
-
-  const newerData = addData(DATA, DATA2, true)
-
-  // Probably shouldn't be a global
-  let convert = pointsConverter({
-    dimensions: DIMENSIONS,
-    padding: [10, 10],
-    data: DATA
-  })
 
   function formatData(_x, _y, _index) {
     return {
@@ -57,27 +82,6 @@
   }
 
   function xAxis() {}
-
-  function init() {
-    const path = createPath(DATA, {
-      stroke: "blue",
-      "stroke-width": 2,
-      fill: "none"
-    })
-
-    // const yAxis = createAxis({
-    //   min: 0,
-    //   max: Math.max(...DATA.map(d => d[1])),
-    //   lines: 5,
-    //   direction: "vertical"
-    // })
-
-    graph.appendChild(path)
-    // graph.appendChild(xAxis)
-    // graph.appendChild(yAxis)
-  }
-
-  init()
 
   function randomData(length) {
     let data = []
@@ -90,16 +94,6 @@
 
     return data
   }
-
-  setTimeout(() => {
-    const newData = [...DATA]
-    newData.push({ x: 10, y: 40, id: 10 })
-
-    console.log(DATA, newerData)
-
-    pathTransition(DATA, newerData, 30)
-    // pathTransition(DATA, randomData(50), 30)
-  }, 1000)
 
   function applyAttributes(target, attributes) {
     for (let attr in attributes) {
@@ -117,39 +111,55 @@
   }
 
   function pointsConverter(params) {
-    const { dimensions, padding, data } = params
+    let { dimensions, padding, data } = params
+    let xRatio, yRatio
 
-    createRect(DIMENSIONS, padding)
+    // Create the x and y ratio
+    calcRatios()
 
-    const verticalPadding =
-      padding.length > 2 ? padding[0] + padding[2] : padding[0] * 2
-    const horizontalPadding =
-      padding.length > 2 ? padding[1] + padding[3] : padding[1] * 2
+    function calcRatios() {
+      createRect(dimensions, padding)
 
-    const width = dimensions[0] - horizontalPadding
-    const height = dimensions[1] - verticalPadding
+      const verticalPadding =
+        padding.length > 2 ? padding[0] + padding[2] : padding[0] * 2
+      const horizontalPadding =
+        padding.length > 2 ? padding[1] + padding[3] : padding[1] * 2
 
-    const yData = data.map(d => d.y)
-    const xData = data.map(d => d.x)
+      const width = dimensions[0] - horizontalPadding
+      const height = dimensions[1] - verticalPadding
 
-    const yMin = 0
-    const yMax = Math.max(...yData)
+      const yData = data.map(d => d.y)
+      const xData = data.map(d => d.x)
 
-    const xMin = 0
-    const xMax = Math.max(...xData)
+      const yMin = 0
+      const yMax = Math.max(...yData)
 
-    const yRatio = height / (yMax - yMin)
-    const xRatio = width / (xMax - xMin)
+      const xMin = 0
+      const xMax = Math.max(...xData)
 
-    return function(_obj) {
-      const obj = Object.assign({}, _obj)
+      xRatio = width / (xMax - xMin)
+      yRatio = height / (yMax - yMin)
+    }
 
-      obj.x = obj.x * xRatio + (padding.length > 2 ? padding[3] : padding[1])
-      obj.y =
-        dimensions[1] -
-        (obj.y * yRatio + (padding.length > 2 ? padding[2] : padding[0]))
+    return {
+      convert: function(_obj) {
+        const obj = Object.assign({}, _obj)
 
-      return obj
+        obj.x = obj.x * xRatio + (padding.length > 2 ? padding[3] : padding[1])
+        obj.y =
+          dimensions[1] -
+          (obj.y * yRatio + (padding.length > 2 ? padding[2] : padding[0]))
+
+        return obj
+      },
+      update: function(newParams) {
+        dimensions = newParams.dimensions || dimensions
+        padding = newParams.padding || padding
+        data = newParams.data || data
+
+        // Update the x and y ratio
+        calcRatios()
+      }
     }
   }
 
@@ -175,23 +185,9 @@
     ]
   }
 
-  function calcPath(data) {
+  function calcPath(data, type) {
     return data.reduce((acc, d, i) => {
       const { x, y } = d
-
-      // const pp = document.createElementNS(
-      //   "http://www.w3.org/2000/svg",
-      //   "circle"
-      // )
-
-      // applyAttributes(pp, {
-      //   cx: x,
-      //   cy: y,
-      //   r: 3,
-      //   fill: "red"
-      // })
-
-      // graph.appendChild(pp)
 
       if (i === 0) {
         return `${acc}M${x} ${y}`
@@ -206,19 +202,14 @@
     }, "")
   }
 
-  function createPath(_data, style) {
-    const path = document.createElementNS("http://www.w3.org/2000/svg", "path")
+  // // This whole function might be a bit obsolete
+  // function createPath(_data, _type) {
+  //   const path = document.createElementNS("http://www.w3.org/2000/svg", "path")
 
-    const data = _data.map(convert) // Convert the data into coordinates, based on the svg height and width
+  //   path.setAttribute("d", calcPath(data, _type))
 
-    const attributes = style
-
-    attributes.d = calcPath(data)
-
-    applyAttributes(path, attributes)
-
-    return path
-  }
+  //   return path
+  // }
 
   // Just a function that shows the boundaries of the path, with a rectangle
   function createRect(dimensions, padding) {
@@ -244,13 +235,9 @@
   function updatePath(_data) {
     const path = document.querySelector("#graph-1 path")
 
-    convert = pointsConverter({
-      dimensions: DIMENSIONS,
-      padding: [10, 10],
-      data: _data
-    })
+    converter.update({ data: _data })
 
-    const data = _data.map(convert)
+    const data = _data.map(converter.convert)
 
     path.setAttribute("d", calcPath(data))
   }
@@ -313,6 +300,15 @@
       }, 1000 / 60)
     }
   }
+
+  // Creating the graph
+
+  // Probably shouldn't be a global
+  // let convert = pointsConverter({
+  //   dimensions: svgDimensions(graph),
+  //   padding: [10, 10],
+  //   data: DATA
+  // })
 })()
 
 // const DATA = randomData(10)
