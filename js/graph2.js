@@ -9,22 +9,22 @@
     const yLength = b.y - a.y
 
     return [
-      Math.sqrt(Math.pow(xLength, 2) + Math.pow(yLength, 2)) * 0.15,
+      Math.sqrt(Math.pow(xLength, 2) + Math.pow(yLength, 2)),
       Math.atan2(yLength, xLength) + (end ? Math.PI : 0)
     ]
   }
 
   // ++++++++++++++++++++++++++++++++++++++
 
-  function controlPoints(data, index, end = false) {
+  function controlPoints(data, index, end = false, smoothing) {
     const previous = data[index - 1] || data[index]
     const next = data[index + 1] || data[index]
 
     const [length, angle] = lengthAngle(previous, next, end)
 
     return [
-      data[index].x + Math.cos(angle) * length,
-      data[index].y + Math.sin(angle) * length
+      data[index].x + Math.cos(angle) * (length * smoothing),
+      data[index].y + Math.sin(angle) * (length * smoothing)
     ]
   }
 
@@ -93,13 +93,15 @@
 
   function getPathLine(_data, _type, _curve) {
     return _data.reduce((acc, d, i) => {
+      // If the data object contains remove, the controlpoints need to be the same as the points
+      const smoothing = 0.15 * (d.remove != undefined ? d.remove : 1)
       const { x, y } = d
 
       if (i === 0) {
         return `${acc}M${x} ${y}`
       } else {
-        const cpStart = controlPoints(_data, i - 1)
-        const cpEnd = controlPoints(_data, i, true)
+        const cpStart = controlPoints(_data, i - 1, false, smoothing)
+        const cpEnd = controlPoints(_data, i, true, smoothing)
 
         return `${acc} C${cpStart[0]} ${cpStart[1]}, ${cpEnd[0]} ${
           cpEnd[1]
@@ -160,6 +162,8 @@
         // Transition all the data, no deleting
         await dataTransition(data, _data, 20, _transitionData => {
           // Update the path
+          console.log(_transitionData)
+
           path.setAttribute("d", getPathLine(convert(_transitionData)))
         })
 
@@ -170,48 +174,79 @@
     }
   }
 
-  function equalize(_old, _new) {
-    // If the newData has more values than the old, the array must be equal to make a nice transition
+  function equalize(..._arrays) {
+    let [oldData, newData] = _arrays
 
-    if (_new.length > _old.length) {
-      return _new.map((d, i) => {
-        if (!_old[i]) {
-          return Object.assign({}, _old[_old.length - 1], { id: d.id })
+    if (newData.length >= oldData.length) {
+      oldData = newData.map((d, i) => {
+        if (!oldData[i]) {
+          return Object.assign({}, oldData[oldData.length - 1], { id: d.id })
         }
 
-        return _old[i]
+        return oldData[i]
+      })
+    } else {
+      oldData = oldData.map((d, i) => {
+        if (!newData[i]) {
+          return Object.assign({}, d, { remove: 1 })
+        }
+
+        return d
+      })
+
+      newData = oldData.map((d, i) => {
+        if (!newData[i]) {
+          return Object.assign({}, newData[newData.length - 1], { id: d.id })
+        }
+
+        return newData[i]
       })
     }
+
+    return [oldData, newData]
   }
 
   function dataTransition(_old, _new, _steps, _callback) {
     return new Promise((resolve, reject) => {
-      const oldData = equalize(_old, _new)
+      const [oldData, newData] = equalize(_old, _new)
 
-      console.log(oldData, _old)
-
-      const yCounter = _new.map((d, i) => (d.y - oldData[i].y) / _steps)
-      const xCounter = _new.map((d, i) => (d.x - oldData[i].x) / _steps)
+      const yCounter = newData.map((d, i) => (d.y - oldData[i].y) / _steps)
+      const xCounter = newData.map((d, i) => (d.x - oldData[i].x) / _steps)
 
       updateTransition()
 
       function updateTransition(_counter = 0) {
-        const outputData = oldData.map((d, i) => ({
-          x: d.x + xCounter[i] * (_counter + 1),
-          y: d.y + yCounter[i] * (_counter + 1),
-          id: d.id
-        }))
+        const outputData = oldData.map((d, i) => {
+          const obj = Object.assign({}, d, {
+            x: d.x + xCounter[i] * (_counter + 1),
+            y: d.y + yCounter[i] * (_counter + 1)
+          })
+
+          if ("remove" in obj) {
+            obj.remove = obj.remove - _counter / _steps
+          }
+
+          return obj
+        })
 
         setTimeout(() => {
           _counter++
 
           if (_counter === _steps) {
-            outputData.forEach(d => {
-              d.x = Math.round(d.x)
-              d.y = Math.round(d.y)
-            })
+            _callback(
+              outputData.map(d => {
+                const obj = Object.assign({}, d, {
+                  x: Math.round(d.x),
+                  y: Math.round(d.y)
+                })
 
-            _callback(outputData)
+                if ("remove" in obj) {
+                  obj.remove = 0
+                }
+
+                return obj
+              })
+            )
 
             // Now the code after the transition can run, when using a then or async/await
             resolve()
@@ -240,5 +275,5 @@
     data: DATA
   })
 
-  setTimeout(interactiveGraph.updateData.bind(null, randomData(20)), 1000)
+  setTimeout(interactiveGraph.updateData.bind(null, randomData(5)), 1000)
 })()
