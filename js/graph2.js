@@ -158,7 +158,7 @@
     return {
       updateData: async _data => {
         // Transition all the data, no deleting
-        await transitionData(data, _data, 20, _transitionData => {
+        await dataTransition(data, _data, 20, _transitionData => {
           // Update the path
           path.setAttribute("d", getPathLine(convert(_transitionData)))
         })
@@ -170,33 +170,28 @@
     }
   }
 
-  function equalize(..._data) {
+  function equalize(_old, _new) {
     // If the newData has more values than the old, the array must be equal to make a nice transition
-    const [oldData, newData] = _data
 
-    let lastData = undefined
-
-    if (newData.length > oldData.length) {
-      newData.forEach((d, i) => {
-        if (!oldData[i]) {
-          if (!lastData) {
-            lastData = oldData[i - 1]
-          }
-
-          oldData.push({ x: lastData.x, y: lastData.y, id: i })
+    if (_new.length > _old.length) {
+      return _new.map((d, i) => {
+        if (!_old[i]) {
+          return Object.assign({}, _old[_old.length - 1], { id: d.id })
         }
+
+        return _old[i]
       })
     }
-
-    return [oldData, newData]
   }
 
-  function transitionData(_old, _new, _steps, _callback) {
+  function dataTransition(_old, _new, _steps, _callback) {
     return new Promise((resolve, reject) => {
-      const [oldData, newData] = equalize(_old, _new)
+      const oldData = equalize(_old, _new)
 
-      const yCounter = newData.map((d, i) => (d.y - oldData[i].y) / _steps)
-      const xCounter = newData.map((d, i) => (d.x - oldData[i].x) / _steps)
+      console.log(oldData, _old)
+
+      const yCounter = _new.map((d, i) => (d.y - oldData[i].y) / _steps)
+      const xCounter = _new.map((d, i) => (d.x - oldData[i].x) / _steps)
 
       updateTransition()
 
@@ -245,5 +240,5 @@
     data: DATA
   })
 
-  setTimeout(interactiveGraph.updateData.bind(null, randomData(10)), 1000)
+  setTimeout(interactiveGraph.updateData.bind(null, randomData(20)), 1000)
 })()
