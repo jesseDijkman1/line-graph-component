@@ -4,27 +4,27 @@
 
   // ++++++++++++++++++++++++++++++++++++++
 
-  function lengthAngle(a, b, end) {
-    const xLength = b.x - a.x
-    const yLength = b.y - a.y
+  function lengthAngle(_a, _b, _end) {
+    const xLength = _b.x - _a.x
+    const yLength = _b.y - _a.y
 
     return [
       Math.sqrt(Math.pow(xLength, 2) + Math.pow(yLength, 2)),
-      Math.atan2(yLength, xLength) + (end ? Math.PI : 0)
+      Math.atan2(yLength, xLength) + (_end ? Math.PI : 0)
     ]
   }
 
   // ++++++++++++++++++++++++++++++++++++++
 
-  function controlPoints(data, index, end = false, smoothing) {
-    const previous = data[index - 1] || data[index]
-    const next = data[index + 1] || data[index]
+  function controlPoints(_data, _index, _end = false, _smoothing) {
+    const previous = _data[_index - 1] || _data[_index]
+    const next = _data[_index + 1] || _data[_index]
 
-    const [length, angle] = lengthAngle(previous, next, end)
+    const [length, angle] = lengthAngle(previous, next, _end)
 
     return [
-      data[index].x + Math.cos(angle) * (length * smoothing),
-      data[index].y + Math.sin(angle) * (length * smoothing)
+      _data[_index].x + Math.cos(angle) * (length * _smoothing),
+      _data[_index].y + Math.sin(angle) * (length * _smoothing)
     ]
   }
 
@@ -65,6 +65,8 @@
   function pointsConverter(_params) {
     const { container, padding } = _params
 
+    let xRatio, yRatio
+
     const verticalPadding =
       padding.length > 2 ? padding[0] + padding[2] : padding[0] * 2
     const horizontalPadding =
@@ -73,8 +75,10 @@
     return _array => {
       const { width, height } = getDimensions(container)
 
-      const xRatio = ratio(width - horizontalPadding, _array.map(d => d.x))
-      const yRatio = ratio(height - verticalPadding, _array.map(d => d.y))
+      if (_array.length > 1) {
+        xRatio = ratio(width - horizontalPadding, _array.map(d => d.x))
+        yRatio = ratio(height - verticalPadding, _array.map(d => d.y))
+      }
 
       return _array.map(_obj => {
         const obj = Object.assign({}, _obj)
@@ -91,23 +95,25 @@
 
   // ++++++++++++++++++++++++++++++++++++++
 
-  function getPathLine(_data, _type, _curve) {
-    return _data.reduce((acc, d, i) => {
-      // If the data object contains remove, the controlpoints need to be the same as the points
-      const smoothing = 0.15 * (d.remove != undefined ? d.remove : 1)
-      const { x, y } = d
+  function getPathLine(_data, _pathEnd) {
+    return (
+      _data.reduce((acc, d, i) => {
+        // If the data object contains remove, the controlpoints need to be the same as the points
+        const smoothing = 0.15 * (d.remove != undefined ? d.remove : 1)
+        const { x, y } = d
 
-      if (i === 0) {
-        return `${acc}M${x} ${y}`
-      } else {
-        const cpStart = controlPoints(_data, i - 1, false, smoothing)
-        const cpEnd = controlPoints(_data, i, true, smoothing)
+        if (i === 0) {
+          return `${acc}M${x} ${y}`
+        } else {
+          const cpStart = controlPoints(_data, i - 1, false, smoothing)
+          const cpEnd = controlPoints(_data, i, true, smoothing)
 
-        return `${acc} C${cpStart[0]} ${cpStart[1]}, ${cpEnd[0]} ${
-          cpEnd[1]
-        }, ${x} ${y}`
-      }
-    }, "")
+          return `${acc} C${cpStart[0]} ${cpStart[1]}, ${cpEnd[0]} ${
+            cpEnd[1]
+          }, ${x} ${y}`
+        }
+      }, "") + _pathEnd
+    )
   }
 
   // ++++++++++++++++++++++++++++++++++++++
@@ -132,47 +138,6 @@
   }
 
   // ++++++++++++++++++++++++++++++++++++++
-
-  function createGraph(_params) {
-    let {
-      container,
-      padding,
-      styling,
-      data,
-      type = "line", // line or area
-      curve = "smooth"
-    } = _params
-
-    const convert = pointsConverter({
-      container: container,
-      padding: padding
-    })
-
-    const pathAttributes = Object.assign({}, styling, {
-      d: getPathLine(convert(data), type, curve)
-    })
-
-    const path = createSvgElement("path", pathAttributes)
-
-    container.appendChild(path)
-
-    // Return data transition functions
-    return {
-      updateData: async _data => {
-        // Transition all the data, no deleting
-        await dataTransition(data, _data, 20, _transitionData => {
-          // Update the path
-          console.log(_transitionData)
-
-          path.setAttribute("d", getPathLine(convert(_transitionData)))
-        })
-
-        // Replace the old with the new
-        data = _data
-      },
-      addData: _value => {}
-    }
-  }
 
   function equalize(..._arrays) {
     let [oldData, newData] = _arrays
@@ -205,6 +170,8 @@
 
     return [oldData, newData]
   }
+
+  // ++++++++++++++++++++++++++++++++++++++
 
   function dataTransition(_old, _new, _steps, _callback) {
     return new Promise((resolve, reject) => {
@@ -248,7 +215,6 @@
               })
             )
 
-            // Now the code after the transition can run, when using a then or async/await
             resolve()
           } else {
             _callback(outputData)
@@ -261,6 +227,83 @@
   }
 
   // ++++++++++++++++++++++++++++++++++++++
+
+  function createGraph(_params) {
+    let {
+      container,
+      padding,
+      styling,
+      data,
+      type = "line", // line or area
+      curve = "smooth"
+    } = _params
+
+    const convert = pointsConverter({
+      container: container,
+      padding: padding
+    })
+
+    const pathCap = () => {
+      if (type == "area") {
+        const { x, y } = convert([{ y: 0, x: 0 }])[0]
+
+        return `V${y} H${x} Z`
+      } else {
+        return ""
+      }
+    }
+
+    const pathAttributes = Object.assign({}, styling, {
+      d: getPathLine(convert(data), pathCap())
+    })
+
+    const path = createSvgElement("path", pathAttributes)
+
+    container.appendChild(path)
+
+    // Return data transition functions
+    return {
+      updateData: async _data => {
+        // Transition all the data, no deleting
+        await dataTransition(data, _data, 20, _transitionData => {
+          // Update the path
+
+          path.setAttribute(
+            "d",
+            getPathLine(convert(_transitionData), pathCap())
+          )
+        })
+
+        // Replace the old with the new
+        data = _data
+      },
+      addData: async (..._data) => {
+        const values = _data.flat()
+
+        const newData = [...data].concat(
+          values.map((d, i) => {
+            return Object.assign({}, data[data.length - 1], {
+              x: i + data.length,
+              y: d,
+              id: i + data.length
+            })
+          })
+        )
+
+        await dataTransition(data, newData, 20, _transitionData => {
+          // Update the path
+          path.setAttribute(
+            "d",
+            getPathLine(convert(_transitionData), pathCap())
+          )
+        })
+
+        data = newData
+      }
+    }
+  }
+
+  // ++++++++++++++++++++++++++++++++++++++
   // +++++++++++ Initialization +++++++++++
   // ++++++++++++++++++++++++++++++++++++++
 
@@ -270,10 +313,22 @@
     styling: {
       stroke: "red",
       "stroke-width": "1",
-      fill: "none"
+      fill: "red"
     },
+    type: "area",
     data: DATA
   })
 
-  setTimeout(interactiveGraph.updateData.bind(null, randomData(5)), 1000)
+  // setTimeout(
+  //   () =>
+  //     interactiveGraph.updateData(
+  //       randomData(Math.round(Math.random() * 10) + 10)
+  //     ),
+  //   1000
+  // )
+  // setInterval(
+  //   () => interactiveGraph.addData(Math.round(Math.random() * 20)),
+  //   1000
+  // )
+  // interactiveGraph.addData(30, 50, 89)
 })()
