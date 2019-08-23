@@ -1,12 +1,8 @@
 ;(function() {
-  function createPath(attributes) {
-    const path = document.createElementNS("http://www.w3.org/2000/svg", "path")
-
+  function applyAttributes(target, attributes) {
     for (let attr in attributes) {
-      path.setAttribute(attr, attributes[attr])
+      target.setAttribute(attr, attributes[attr])
     }
-
-    return path
   }
 
   function calcPath(data) {
@@ -30,10 +26,10 @@
   function svgDimensions(svg) {
     const css = getComputedStyle(svg)
 
-    return [
-      Number(css.width.replace("px", "")),
-      Number(css.height.replace("px", ""))
-    ]
+    return {
+      width: Number(css.width.replace("px", "")),
+      height: Number(css.height.replace("px", ""))
+    }
   }
 
   // Create random data
@@ -47,54 +43,37 @@
     return array.map((n, i) => ({ x: i, y: n, id: i }))
   }
 
+  const ratio = (_dimension, _array) => {
+    const min = 0 // Should also be passed in
+    const max = Math.max(..._array)
+
+    return _dimension / (max - min)
+  }
+
   function pointsConverter(params) {
-    let { dimensions, padding, data } = params
+    let { container, padding } = params
 
     const verticalPadding =
       padding.length > 2 ? padding[0] + padding[2] : padding[0] * 2
     const horizontalPadding =
       padding.length > 2 ? padding[1] + padding[3] : padding[1] * 2
 
-    const width = dimensions[0] - horizontalPadding
-    const height = dimensions[1] - verticalPadding
+    return function(_array) {
+      const { width, height } = svgDimensions(container)
 
-    const yRatio = () => {
-      const yData = data.map(d => d.y)
+      const xRatio = ratio(width - horizontalPadding, _array.map(d => d.x))
+      const yRatio = ratio(height - verticalPadding, _array.map(d => d.y))
 
-      const yMin = 0
-      const yMax = Math.max(...yData)
-
-      return height / (yMax - yMin)
-    }
-
-    const xRatio = () => {
-      const xData = data.map(d => d.x)
-
-      const xMin = 0
-      const xMax = Math.max(...xData)
-
-      return width / (xMax - xMin)
-    }
-
-    return {
-      convert: _obj => {
+      return _array.map(_obj => {
         const obj = Object.assign({}, _obj)
 
-        obj.x =
-          obj.x * xRatio() + (padding.length > 2 ? padding[3] : padding[1])
+        obj.x = obj.x * xRatio + (padding.length > 2 ? padding[3] : padding[1])
         obj.y =
-          dimensions[1] -
-          (obj.y * yRatio() + (padding.length > 2 ? padding[2] : padding[0]))
+          height -
+          (obj.y * yRatio + (padding.length > 2 ? padding[2] : padding[0]))
 
         return obj
-      },
-      update: newParams => {
-        if (typeof newParams == "object") {
-          dimensions = newParams.dimensions || dimensions
-          padding = newParams.padding || padding
-          data = newParams.data || data
-        }
-      }
+      })
     }
   }
 
@@ -129,10 +108,9 @@
   const graph = document.getElementById("graph-2")
   const DATA = randomData(10)
 
-  const converter = pointsConverter({
-    dimensions: svgDimensions(graph),
-    padding: [10, 10],
-    data: DATA
+  const convert = pointsConverter({
+    container: graph,
+    padding: [10, 10]
   })
 
   const styling = {
@@ -141,13 +119,58 @@
     fill: "none"
   }
 
-  const convertedData = DATA.map(converter.convert)
+  // Convert the raw data into fitting data for the svg
+  const convertedData = convert(DATA)
+
+  console.log(DATA, convertedData)
 
   const pathAttributes = Object.assign({}, styling, {
     d: calcPath(convertedData)
   })
 
-  const path = createPath(pathAttributes)
+  const path = document.createElementNS("http://www.w3.org/2000/svg", "path")
+
+  applyAttributes(path, pathAttributes)
 
   graph.appendChild(path)
+})()
+//
+;(function() {
+  const graph = document.getElementById("graph-2")
+
+  // Get the dimensions from an element
+  function getDimensions(_element) {
+    const css = getComputedStyle(_element)
+
+    return [
+      Number(css.width.replace("px", "")),
+      Number(css.height.replace("px", ""))
+    ]
+  }
+
+  function createGraph(params) {
+    const {
+      container,
+      padding,
+      styling,
+      data,
+      type = "line",
+      curve = "smooth"
+    } = params
+
+    const dimensions = getDimensions(container)
+
+    const converter = pointsConverter({})
+
+    const line = calcPath(data)
+
+    // Append to container
+    container.appendChild(path)
+
+    // Return data transition functions
+    return {
+      updateData: function(_data) {},
+      addData: function(_data) {}
+    }
+  }
 })()
