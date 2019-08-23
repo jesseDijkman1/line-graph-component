@@ -2,6 +2,8 @@
   const graph = document.getElementById("graph-2")
   const DATA = randomData(10)
 
+  // ++++++++++++++++++++++++++++++++++++++
+
   function lengthAngle(a, b, end) {
     const xLength = b.x - a.x
     const yLength = b.y - a.y
@@ -12,7 +14,8 @@
     ]
   }
 
-  // Calculate the controlpoints for the bezier curve
+  // ++++++++++++++++++++++++++++++++++++++
+
   function controlPoints(data, index, end = false) {
     const previous = data[index - 1] || data[index]
     const next = data[index + 1] || data[index]
@@ -25,7 +28,8 @@
     ]
   }
 
-  // Get the dimensions from an element
+  // ++++++++++++++++++++++++++++++++++++++
+
   function getDimensions(_element) {
     const css = getComputedStyle(_element)
 
@@ -35,18 +39,20 @@
     }
   }
 
-  // Create random data
-  function randomData(length) {
+  // ++++++++++++++++++++++++++++++++++++++
+
+  function randomData(_length) {
     const array = []
 
-    while (array.length < length) {
+    while (array.length < _length) {
       array.push(10 * Math.round(10 * Math.random()))
     }
 
     return array.map((n, i) => ({ x: i, y: n, id: i })) // The id is used for calculating transitions
   }
 
-  // Calculate the ratio between a dimension and an array
+  // ++++++++++++++++++++++++++++++++++++++
+
   const ratio = (_dimension, _array) => {
     const min = 0 // Should also be passed in
     const max = Math.max(..._array)
@@ -54,9 +60,10 @@
     return _dimension / (max - min)
   }
 
-  // Set up the converter, by first passing in the container and paddings
-  function pointsConverter(params) {
-    const { container, padding } = params
+  // ++++++++++++++++++++++++++++++++++++++
+
+  function pointsConverter(_params) {
+    const { container, padding } = _params
 
     const verticalPadding =
       padding.length > 2 ? padding[0] + padding[2] : padding[0] * 2
@@ -82,15 +89,17 @@
     }
   }
 
-  function getPathLine(data) {
-    return data.reduce((acc, d, i) => {
+  // ++++++++++++++++++++++++++++++++++++++
+
+  function getPathLine(_data, _type, _curve) {
+    return _data.reduce((acc, d, i) => {
       const { x, y } = d
 
       if (i === 0) {
         return `${acc}M${x} ${y}`
       } else {
-        const cpStart = controlPoints(data, i - 1)
-        const cpEnd = controlPoints(data, i, true)
+        const cpStart = controlPoints(_data, i - 1)
+        const cpEnd = controlPoints(_data, i, true)
 
         return `${acc} C${cpStart[0]} ${cpStart[1]}, ${cpEnd[0]} ${
           cpEnd[1]
@@ -99,11 +108,15 @@
     }, "")
   }
 
+  // ++++++++++++++++++++++++++++++++++++++
+
   function applyAttributes(_target, _attributes) {
     for (let attr in _attributes) {
       _target.setAttribute(attr, _attributes[attr])
     }
   }
+
+  // ++++++++++++++++++++++++++++++++++++++
 
   function createSvgElement(_type, _attributes) {
     const element = document.createElementNS(
@@ -116,17 +129,17 @@
     return element
   }
 
-  function createGraph(params) {
-    const {
+  // ++++++++++++++++++++++++++++++++++++++
+
+  function createGraph(_params) {
+    let {
       container,
       padding,
       styling,
       data,
-      type = "line",
+      type = "line", // line or area
       curve = "smooth"
-    } = params
-
-    // const dimensions = getDimensions(container)
+    } = _params
 
     const convert = pointsConverter({
       container: container,
@@ -134,23 +147,94 @@
     })
 
     const pathAttributes = Object.assign({}, styling, {
-      d: getPathLine(convert(data))
+      d: getPathLine(convert(data), type, curve)
     })
 
     const path = createSvgElement("path", pathAttributes)
 
-    // Append to container
     container.appendChild(path)
 
     // Return data transition functions
     return {
-      updateData: function(_data) {},
-      addData: function(_data) {}
+      updateData: async _data => {
+        // Transition all the data, no deleting
+        await transitionData(data, _data, 20, _transitionData => {
+          // Update the path
+          path.setAttribute("d", getPathLine(convert(_transitionData)))
+        })
+
+        // Replace the old with the new
+        data = _data
+      },
+      addData: _value => {}
     }
   }
 
-  // Initialize the graph
-  createGraph({
+  function equalize(..._data) {
+    // If the newData has more values than the old, the array must be equal to make a nice transition
+    const [oldData, newData] = _data
+
+    let lastData = undefined
+
+    if (newData.length > oldData.length) {
+      newData.forEach((d, i) => {
+        if (!oldData[i]) {
+          if (!lastData) {
+            lastData = oldData[i - 1]
+          }
+
+          oldData.push({ x: lastData.x, y: lastData.y, id: i })
+        }
+      })
+    }
+
+    return [oldData, newData]
+  }
+
+  function transitionData(_old, _new, _steps, _callback) {
+    return new Promise((resolve, reject) => {
+      const [oldData, newData] = equalize(_old, _new)
+
+      const yCounter = newData.map((d, i) => (d.y - oldData[i].y) / _steps)
+      const xCounter = newData.map((d, i) => (d.x - oldData[i].x) / _steps)
+
+      updateTransition()
+
+      function updateTransition(_counter = 0) {
+        const outputData = oldData.map((d, i) => ({
+          x: d.x + xCounter[i] * (_counter + 1),
+          y: d.y + yCounter[i] * (_counter + 1),
+          id: d.id
+        }))
+
+        setTimeout(() => {
+          _counter++
+
+          if (_counter === _steps) {
+            outputData.forEach(d => {
+              d.x = Math.round(d.x)
+              d.y = Math.round(d.y)
+            })
+
+            _callback(outputData)
+
+            // Now the code after the transition can run, when using a then or async/await
+            resolve()
+          } else {
+            _callback(outputData)
+
+            return updateTransition(_counter)
+          }
+        }, 1000 / 60)
+      }
+    })
+  }
+
+  // ++++++++++++++++++++++++++++++++++++++
+  // +++++++++++ Initialization +++++++++++
+  // ++++++++++++++++++++++++++++++++++++++
+
+  const interactiveGraph = createGraph({
     container: graph,
     padding: [10, 20],
     styling: {
@@ -160,4 +244,6 @@
     },
     data: DATA
   })
+
+  setTimeout(interactiveGraph.updateData.bind(null, randomData(10)), 1000)
 })()
