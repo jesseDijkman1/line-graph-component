@@ -1,374 +1,445 @@
 ;(function() {
-  const graph = document.getElementById("graph-1")
+  const graph = document.getElementById("graph-2")
   const DATA = randomData(10)
+  const DATA2 = randomData(7)
 
-  // The styling for the graph
-  const styling = {
-    stroke: "blue",
-    "stroke-width": 2,
-    fill: "none"
-  }
+  // ++++++++++++++++++++++++++++++++++++++
 
-  // Set up the points converter, returns an object with the function "convert" and "update"
-  const converter = pointsConverter({
-    dimensions: svgDimensions(graph),
-    padding: [10, 10],
-    data: DATA
-  })
-
-  function init() {
-    const path = document.createElementNS("http://www.w3.org/2000/svg", "path")
-
-    const convertedData = DATA.map(converter.convert)
-
-    path.setAttribute("d", calcPath(convertedData))
-
-    // const path = createPath(convertedData, "curved")
-
-    // Set the styling for the path
-    // applyAttributes(path, styling)
-
-    graph.appendChild(path)
-
-    // Transition the graph into a new graph with new data
-    setTimeout(() => {
-      pathTransition(DATA, randomData(20), 30)
-    }, 1000)
-  }
-
-  init()
-
-  function addData(_data, newData, preserveLength = false) {
-    const data = [..._data]
-    const newX = data[data.length - 1].x + 1
-
-    if (Array.isArray(newData)) {
-      newData.forEach((d, i) => {
-        data.push({ x: newX + i, y: d.y, id: newX + i })
-      })
-    } else if (typeof newData === "object") {
-      data.push({ x: newX, y: newData.y, id: newX })
-    } else if (typeof newData === "number") {
-      data.push({ x: newX, y: newData, id: newX })
-    } else {
-      return data
-    }
-
-    if (preserveLength) {
-      const addedAmount = data.length - _data.length
-
-      return data.map(d => {
-        const obj = Object.assign({}, d)
-        const yBase = data[addedAmount].y
-
-        if (d.x < addedAmount) {
-          obj.x = 0
-          // obj.y = yBase
-        }
-
-        return obj
-      })
-    } else {
-      return data
-    }
-  }
-
-  function formatData(_x, _y, _index) {
-    return {
-      x: _x,
-      y: _y,
-      id: _index
-    }
-  }
-
-  function xAxis() {}
-
-  function randomData(length) {
-    let data = []
-
-    while (data.length < length) {
-      data.push([data.length, 10 * Math.round(10 * Math.random())])
-    }
-
-    data = data.map((d, i) => formatData(d[0], d[1], i))
-
-    return data
-  }
-
-  function applyAttributes(target, attributes) {
-    for (let attr in attributes) {
-      target.setAttribute(attr, attributes[attr])
-    }
-  }
-
-  function svgDimensions(svg) {
-    const css = getComputedStyle(svg)
+  function lengthAngle(_a, _b, _end) {
+    const xLength = _b.x - _a.x
+    const yLength = _b.y - _a.y
 
     return [
-      Number(css.width.replace("px", "")),
-      Number(css.height.replace("px", ""))
+      Math.sqrt(Math.pow(xLength, 2) + Math.pow(yLength, 2)),
+      Math.atan2(yLength, xLength) + (_end ? Math.PI : 0)
     ]
   }
 
-  function pointsConverter(params) {
-    let { dimensions, padding, data } = params
-    let xRatio, yRatio
+  // ++++++++++++++++++++++++++++++++++++++
 
-    // Create the x and y ratio
-    calcRatios()
+  function controlPoints(_data, _index, _end = false, _smoothing) {
+    let previous = _data[_index - 1] || _data[_index]
+    let next = _data[_index + 1] || _data[_index]
 
-    function calcRatios() {
-      createRect(dimensions, padding)
+    const [length, angle] = lengthAngle(previous, next, _end)
 
-      const verticalPadding =
-        padding.length > 2 ? padding[0] + padding[2] : padding[0] * 2
-      const horizontalPadding =
-        padding.length > 2 ? padding[1] + padding[3] : padding[1] * 2
+    return [
+      _data[_index].x + Math.cos(angle) * (length * _smoothing),
+      _data[_index].y + Math.sin(angle) * (length * _smoothing)
+    ]
+  }
 
-      const width = dimensions[0] - horizontalPadding
-      const height = dimensions[1] - verticalPadding
+  // ++++++++++++++++++++++++++++++++++++++
 
-      const yData = data.map(d => d.y)
-      const xData = data.map(d => d.x)
-
-      const yMin = 0
-      const yMax = Math.max(...yData)
-
-      const xMin = 0
-      const xMax = Math.max(...xData)
-
-      xRatio = width / (xMax - xMin)
-      yRatio = height / (yMax - yMin)
-    }
+  function getDimensions(_element) {
+    const css = getComputedStyle(_element)
 
     return {
-      convert: function(_obj) {
+      width: Number(css.width.replace("px", "")),
+      height: Number(css.height.replace("px", ""))
+    }
+  }
+
+  // ++++++++++++++++++++++++++++++++++++++
+
+  function randomData(_length) {
+    const array = []
+
+    while (array.length < _length) {
+      array.push(10 * Math.round(10 * Math.random()))
+    }
+
+    return array.map((n, i) => ({ x: i, y: n, id: i })) // The id is used for calculating transitions
+  }
+
+  // ++++++++++++++++++++++++++++++++++++++
+
+  const ratio = (_dimension, _array) => {
+    const min = 0 // Should also be passed in
+    const max = Math.max(..._array)
+
+    return _dimension / (max - min)
+  }
+
+  // ++++++++++++++++++++++++++++++++++++++
+
+  function pointsConverter(_params) {
+    const { container, padding } = _params
+
+    let xRatio, yRatio
+
+    const verticalPadding =
+      padding.length > 2 ? padding[0] + padding[2] : padding[0] * 2
+    const horizontalPadding =
+      padding.length > 2 ? padding[1] + padding[3] : padding[1] * 2
+
+    return _array => {
+      const { width, height } = getDimensions(container)
+
+      if (_array.length > 1) {
+        xRatio = ratio(width - horizontalPadding, _array.map(d => d.x))
+        yRatio = ratio(height - verticalPadding, _array.map(d => d.y))
+      }
+
+      return _array.map(_obj => {
         const obj = Object.assign({}, _obj)
 
         obj.x = obj.x * xRatio + (padding.length > 2 ? padding[3] : padding[1])
         obj.y =
-          dimensions[1] -
+          height -
           (obj.y * yRatio + (padding.length > 2 ? padding[2] : padding[0]))
 
         return obj
-      },
-      update: function(newParams) {
-        dimensions = newParams.dimensions || dimensions
-        padding = newParams.padding || padding
-        data = newParams.data || data
-
-        // Update the x and y ratio
-        calcRatios()
-      }
+      })
     }
   }
 
-  function lengthAngle(a, b, end) {
-    const xLength = b.x - a.x
-    const yLength = b.y - a.y
+  // ++++++++++++++++++++++++++++++++++++++
 
-    return [
-      Math.sqrt(Math.pow(xLength, 2) + Math.pow(yLength, 2)) * 0.15,
-      Math.atan2(yLength, xLength) + (end ? Math.PI : 0)
-    ]
+  function plotPoint(_x, _y, _color) {
+    const points = document.getElementsByClassName("control_point")
+
+    for (let i = 0; i < points.length; i++) {
+      points[i].remove()
+    }
+
+    setTimeout(() => {
+      const point = document.createElementNS(
+        "http://www.w3.org/2000/svg",
+        "circle"
+      )
+
+      applyAttributes(point, {
+        cx: _x,
+        cy: _y,
+        r: 1,
+        fill: _color,
+        class: "control_point"
+      })
+
+      graph.appendChild(point)
+    }, 0)
   }
 
-  function controlPoints(data, index, end = false) {
-    const previous = data[index - 1] || data[index]
-    const next = data[index + 1] || data[index]
+  function getPathLine(_data, _pathEnd = "") {
+    return (
+      _data.reduce((acc, d, i) => {
+        // If the data object contains remove, the controlpoints need to be the same as the points
+        const smoothing =
+          0.15 * (d.curveFactor != undefined ? d.curveFactor : 1)
 
-    const [length, angle] = lengthAngle(previous, next, end)
+        const { x, y } = d
 
-    return [
-      data[index].x + Math.cos(angle) * length,
-      data[index].y + Math.sin(angle) * length
-    ]
+        if (i === 0) {
+          return `${acc}M${x} ${y}`
+        } else {
+          const cpStart = controlPoints(_data, i - 1, false, smoothing)
+          const cpEnd = controlPoints(_data, i, true, smoothing)
+
+          plotPoint(cpStart[0], cpStart[1], "blue")
+          plotPoint(cpEnd[0], cpEnd[1], "yellow")
+          plotPoint(x, y, "black")
+
+          return `${acc} C${cpStart[0]} ${cpStart[1]}, ${cpEnd[0]} ${
+            cpEnd[1]
+          }, ${x} ${y}`
+        }
+      }, "") + _pathEnd
+    )
   }
 
-  function calcPath(data, type) {
-    return data.reduce((acc, d, i) => {
-      const { x, y } = d
+  // ++++++++++++++++++++++++++++++++++++++
 
-      if (i === 0) {
-        return `${acc}M${x} ${y}`
-      } else {
-        const cpStart = controlPoints(data, i - 1)
-        const cpEnd = controlPoints(data, i, true)
+  function applyAttributes(_target, _attributes) {
+    for (let _attr in _attributes) {
+      _target.setAttribute(_attr, _attributes[_attr])
+    }
+  }
 
-        return `${acc} C${cpStart[0]} ${cpStart[1]}, ${cpEnd[0]} ${
-          cpEnd[1]
-        }, ${x} ${y}`
+  // ++++++++++++++++++++++++++++++++++++++
+
+  function createSvgElement(_type, _attributes, _styles) {
+    const element = document.createElementNS(
+      "http://www.w3.org/2000/svg",
+      _type
+    )
+
+    applyAttributes(element, _attributes)
+
+    return element
+  }
+
+  // ++++++++++++++++++++++++++++++++++++++
+
+  function equalizeAll(..._arrays) {
+    let [oldData, newData] = _arrays
+
+    if (newData.length >= oldData.length) {
+      oldData = newData.map((d, i) => {
+        if (!oldData[i]) {
+          return Object.assign({}, oldData[oldData.length - 1], { id: d.id })
+        }
+
+        return oldData[i]
+      })
+    } else {
+      oldData = oldData.map((d, i) => {
+        if (!newData[i]) {
+          return Object.assign({}, d, { curveFactor: 1 })
+        }
+
+        return d
+      })
+
+      newData = oldData.map((d, i) => {
+        if (!newData[i]) {
+          return Object.assign({}, newData[newData.length - 1], { id: d.id })
+        }
+
+        return newData[i]
+      })
+    }
+
+    return [oldData, newData]
+  }
+
+  // ++++++++++++++++++++++++++++++++++++++
+
+  function equalizeChange(_data) {
+    const startData = _data.map((d, i) => {
+      if ("push" in d) {
+        return Object.assign(
+          {},
+          {
+            x: _data[i - 1].x,
+            y: _data[i - 1].y,
+            id: d.id
+          }
+        )
       }
-    }, "")
-  }
 
-  // // This whole function might be a bit obsolete
-  // function createPath(_data, _type) {
-  //   const path = document.createElementNS("http://www.w3.org/2000/svg", "path")
+      if ("shift" in d) {
+        return Object.assign(
+          {},
+          {
+            x: d.x,
+            y: d.y,
+            id: d.id,
+            curveFactor: 1,
+            remove: true
+          }
+        )
+      }
 
-  //   path.setAttribute("d", calcPath(data, _type))
+      if ("shift" in _data[i - 1]) {
+        return Object.assign({}, d, { curveFactor: 1 })
+      }
 
-  //   return path
-  // }
-
-  // Just a function that shows the boundaries of the path, with a rectangle
-  function createRect(dimensions, padding) {
-    const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect")
-
-    applyAttributes(rect, {
-      stroke: "red",
-      "stroke-width": "1",
-      x: padding.length > 2 ? padding[3] : padding[1],
-      y: padding.length > 2 ? padding[0] : padding[0],
-      fill: "none",
-      width:
-        dimensions[0] -
-        (padding.length > 2 ? padding[1] + padding[3] : padding[1] * 2),
-      height:
-        dimensions[1] -
-        (padding.length > 2 ? padding[0] + padding[2] : padding[0] * 2)
+      return d
     })
 
-    graph.appendChild(rect)
+    const endData = _data.map((d, i) => {
+      if ("shift" in d) {
+        return Object.assign(
+          {},
+          { x: d.x, y: _data[i + 1].y, id: d.id, curveFactor: 1 }
+        )
+      }
+
+      return Object.assign({}, { x: d.x - 1, y: d.y, id: d.id })
+    })
+
+    return [startData, endData]
   }
 
-  function updatePath(_data) {
-    const path = document.querySelector("#graph-1 path")
+  // ++++++++++++++++++++++++++++++++++++++
 
-    converter.update({ data: _data })
+  function dataTransition(_data, _steps, _callback) {
+    return new Promise((resolve, reject) => {
+      const [oldData, newData] = _data
 
-    const data = _data.map(converter.convert)
+      const yCounter = {}
+      const xCounter = {}
 
-    path.setAttribute("d", calcPath(data))
-  }
-
-  function equalize(..._data) {
-    const [oldData, newData] = _data
-
-    let lastData = undefined
-
-    if (newData.length > oldData.length) {
-      newData.forEach((d, i) => {
-        if (!oldData[i]) {
-          if (!lastData) {
-            // lastX = newData[i - 1].x
-            lastData = newData[i - 1]
-          }
-
-          oldData.push({ x: lastData.x, y: lastData.y, id: i })
-        }
-      })
-    }
-
-    return oldData
-  }
-
-  function pathTransition(_oldData, _newData, steps = 10) {
-    const oldData = equalize(_oldData, _newData)
-    const newData = _newData
-
-    const yCounter = newData.map((d, i) => (d.y - oldData[i].y) / steps)
-    const xCounter = newData.map((d, i) => (d.x - oldData[i].x) / steps)
-
-    let counter = 0
-
-    updateTransition(oldData)
-
-    function updateTransition(array) {
-      const outputData = array.map((d, i) => {
-        return {
-          x: d.x + xCounter[i],
-          y: d.y + yCounter[i],
-          id: d.id
-        }
+      newData.forEach(d => {
+        xCounter[d.id] = (d.x - oldData.find(d2 => d2.id === d.id).x) / _steps
       })
 
-      setTimeout(() => {
-        counter++
+      newData.forEach(d => {
+        yCounter[d.id] = (d.y - oldData.find(d2 => d2.id === d.id).y) / _steps
+      })
 
-        if (counter === steps) {
-          outputData.forEach(d => {
-            d.x = Math.round(d.x)
-            d.y = Math.round(d.y)
+      updateTransition()
+
+      function updateTransition(_counter = 0) {
+        const outputData = oldData.map(d => {
+          const obj = Object.assign({}, d, {
+            x: d.x + xCounter[d.id] * (_counter + 1),
+            y: d.y + yCounter[d.id] * (_counter + 1)
           })
-          updatePath(outputData)
-        } else {
-          updatePath(outputData)
 
-          return updateTransition(outputData)
+          return obj
+        })
+
+        setTimeout(() => {
+          _counter++
+
+          if (_counter === _steps) {
+            _callback(
+              outputData.map(d => {
+                const obj = Object.assign({}, d, {
+                  x: Math.round(d.x),
+                  y: Math.round(d.y)
+                })
+
+                if ("curveFactor" in obj) {
+                  obj.curveFactor = 0
+                }
+
+                return obj
+              })
+            )
+
+            resolve()
+          } else {
+            _callback(outputData)
+
+            return updateTransition(_counter)
+          }
+        }, 1000 / 60)
+      }
+    })
+  }
+
+  // ++++++++++++++++++++++++++++++++++++++
+
+  function cleanData(_data, _filterKey) {
+    const cleanedData = _data.filter((d, i) => {
+      if (!("curveFactor" in d)) {
+        return Object.assign({}, d, { id: d.x })
+      }
+    })
+
+    return cleanedData.map((d, i) => {
+      return Object.assign({}, d, { id: i })
+    })
+  }
+
+  // ++++++++++++++++++++++++++++++++++++++
+
+  function createGraph(_params) {
+    let {
+      container,
+      padding,
+      styling,
+      data,
+      type = "line", // line or area
+      curve = "smooth"
+    } = _params
+
+    const pathCap = () => {
+      const { x, y } = convert([{ y: 0, x: 0 }])[0]
+
+      return `V${y} H${x} Z`
+    }
+
+    const convert = pointsConverter({
+      container: container,
+      padding: padding
+    })
+
+    const pathAttributes = Object.assign({}, styling, {
+      d: getPathLine(convert(data), type === "area" ? pathCap() : "")
+    })
+
+    const path = createSvgElement("path", pathAttributes)
+
+    container.appendChild(path)
+
+    // Return data transition functions
+    return {
+      updateData: async _new => {
+        const alteredOriginal = _new.some(
+          d =>
+            Object.keys(d).includes("shift") || Object.keys(d).includes("push")
+        )
+
+        const transitionData = alteredOriginal
+          ? equalizeChange(_new)
+          : equalizeAll(data, _new)
+
+        // Transition all the data, no deleting
+        await dataTransition(transitionData, 20, _returnData => {
+          // Update the path
+
+          path.setAttribute("d", getPathLine(convert(_returnData), pathCap()))
+        })
+
+        // Replace the old with the new
+        data = cleanData(transitionData[1], "remove")
+
+        Promise.resolve()
+      },
+      addValue: (_value, _maxLength) => {
+        let _data = [...data]
+
+        if (typeof _maxLength === "number" && data.length + 1 > _maxLength) {
+          _data = data.map((d, i) =>
+            i === 0 ? Object.assign({}, d, { shift: 1 }) : d
+          )
         }
-      }, 1000 / 60)
+
+        const obj = Object.assign({}, data[data.length - 1], {
+          x: data.length,
+          y: _value,
+          id: data.length,
+          push: 0
+        })
+
+        _data.push(obj)
+
+        return _data
+      }
     }
   }
 
-  // Creating the graph
+  // ++++++++++++++++++++++++++++++++++++++
+  // +++++++++++ Initialization +++++++++++
+  // ++++++++++++++++++++++++++++++++++++++
 
-  // Probably shouldn't be a global
-  // let convert = pointsConverter({
-  //   dimensions: svgDimensions(graph),
-  //   padding: [10, 10],
-  //   data: DATA
-  // })
+  const interactiveGraph = createGraph({
+    container: graph,
+    padding: [10, 20],
+    styling: {
+      stroke: "red",
+      "stroke-width": "1",
+      fill: "red"
+    },
+    type: "area",
+    data: DATA
+  })
+
+  // const _n = interactiveGraph.addValue(30, 5)
+
+  // interactiveGraph.updateData(_n)
+
+  const newValues = [50, 20, 70, 40, 10, 80, 10, 30, 20]
+
+  // setInterval(() => newValues.push(Math.round(Math.random() * 90)), 500)
+
+  streamValues(newValues)
+
+  async function streamValues(_values, _maxLength = 9) {
+    const value = _values.shift()
+
+    const data = interactiveGraph.addValue(value, _maxLength)
+
+    await interactiveGraph.updateData(data)
+
+    if (_values.length > 0) {
+      return streamValues(_values, _maxLength)
+    }
+
+    return
+  }
 })()
-
-// const DATA = randomData(10)
-// const DATA2 = randomData(5)
-
-// function randomData(length) {
-//   const data = []
-
-//   while (data.length < length) {
-//     data.push(
-//       formatData(data.length, 10 * Math.round(10 * Math.random()), data.length)
-//     )
-//   }
-
-//   return data
-// }
-
-// function formatData(_x, _y, _index) {
-//   return {
-//     x: _x,
-//     y: _y,
-//     id: _index
-//   }
-// }
-
-// function addData(_data, newData, preserveLength = false) {
-//   const data = [..._data]
-//   const newX = data[data.length - 1].x + 1
-
-//   if (Array.isArray(newData)) {
-//     newData.forEach((d, i) => {
-//       data.push({ x: newX + i, y: d.y, id: newX + i })
-//     })
-//   } else if (typeof newData === "object") {
-//     data.push({ x: newX, y: newData.y, id: newX })
-//   } else if (typeof newData === "number") {
-//     data.push({ x: newX, y: newData, id: newX })
-//   } else {
-//     return data
-//   }
-
-//   if (preserveLength) {
-//     const addedAmount = data.length - _data.length
-
-//     return data.map(d => {
-//       const obj = Object.assign({}, d)
-//       const yBase = data[addedAmount].y
-
-//       if (d.x < addedAmount) {
-//         obj.x = 0
-//         obj.y = yBase
-//       }
-
-//       return obj
-//     })
-//   } else {
-//     return data
-//   }
-// }
-
-// const newerData = addData(DATA, DATA2, true)
-
-// console.log(newerData)
