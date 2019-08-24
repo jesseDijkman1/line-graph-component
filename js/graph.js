@@ -3,6 +3,8 @@
   const DATA = randomData(10)
   const DATA2 = randomData(7)
 
+  const newValues = [10, 30, 50, 80, 10, 20, 70, 30]
+
   // ++++++++++++++++++++++++++++++++++++++
 
   function lengthAngle(_a, _b, _end) {
@@ -64,33 +66,36 @@
   // ++++++++++++++++++++++++++++++++++++++
 
   function pointsConverter(_params) {
-    const { container, padding } = _params
+    const { container, padding, data } = _params
 
-    let xRatio, yRatio
+    const dimensions = getDimensions(container)
 
     const verticalPadding =
       padding.length > 2 ? padding[0] + padding[2] : padding[0] * 2
     const horizontalPadding =
       padding.length > 2 ? padding[1] + padding[3] : padding[1] * 2
 
-    return _array => {
-      const { width, height } = getDimensions(container)
+    return (_x, _y, _data = data) => {
+      const xRatio = ratio(
+        dimensions.width - horizontalPadding,
+        _data.map(d => d.x)
+      )
+      const yRatio = ratio(
+        dimensions.height - verticalPadding,
+        _data.map(d => d.y)
+      )
 
-      if (_array.length > 1) {
-        xRatio = ratio(width - horizontalPadding, _array.map(d => d.x))
-        yRatio = ratio(height - verticalPadding, _array.map(d => d.y))
-      }
+      const x =
+        typeof _x === "number"
+          ? _x * xRatio + (padding.length > 2 ? padding[3] : padding[1])
+          : null
+      const y =
+        typeof _y === "number"
+          ? dimensions.height -
+            (_y * yRatio + (padding.length > 2 ? padding[2] : padding[0]))
+          : null
 
-      return _array.map(_obj => {
-        const obj = Object.assign({}, _obj)
-
-        obj.x = obj.x * xRatio + (padding.length > 2 ? padding[3] : padding[1])
-        obj.y =
-          height -
-          (obj.y * yRatio + (padding.length > 2 ? padding[2] : padding[0]))
-
-        return obj
-      })
+      return { x: x, y: y }
     }
   }
 
@@ -121,7 +126,7 @@
     }, 0)
   }
 
-  function getPathLine(_data, _pathEnd = "") {
+  function getPathLine(_data, _pathEnd) {
     return (
       _data.reduce((acc, d, i) => {
         // If the data object contains remove, the controlpoints need to be the same as the points
@@ -225,14 +230,15 @@
             x: d.x,
             y: d.y,
             id: d.id,
-            curveFactor: 1,
-            remove: true
+            curveFactor: 1
           }
         )
       }
 
-      if ("shift" in _data[i - 1]) {
-        return Object.assign({}, d, { curveFactor: 1 })
+      if (i > 1) {
+        if ("shift" in _data[i - 1]) {
+          return Object.assign({}, d, { curveFactor: 1 })
+        }
       }
 
       return d
@@ -246,7 +252,10 @@
         )
       }
 
-      return Object.assign({}, { x: d.x - 1, y: d.y, id: d.id })
+      if (_data.some(d => Object.keys(d).includes("shift"))) {
+        return Object.assign({}, { x: d.x - 1, y: d.y, id: d.id })
+      }
+      return d
     })
 
     return [startData, endData]
@@ -313,7 +322,7 @@
 
   // ++++++++++++++++++++++++++++++++++++++
 
-  function cleanData(_data, _filterKey) {
+  function cleanData(_data, _filterKey, _deleteObject) {
     const cleanedData = _data.filter((d, i) => {
       if (!("curveFactor" in d)) {
         return Object.assign({}, d, { id: d.x })
@@ -327,6 +336,8 @@
 
   // ++++++++++++++++++++++++++++++++++++++
 
+  const pathCap = (_x, _y) => `V${_y} H${_x} Z`
+
   function createGraph(_params) {
     let {
       container,
@@ -337,28 +348,35 @@
       curve = "smooth"
     } = _params
 
-    const pathCap = () => {
-      const { x, y } = convert([{ y: 0, x: 0 }])[0]
-
-      return `V${y} H${x} Z`
-    }
-
     const convert = pointsConverter({
       container: container,
-      padding: padding
+      padding: padding,
+      data: data
     })
 
-    const pathAttributes = Object.assign({}, styling, {
-      d: getPathLine(convert(data), type === "area" ? pathCap() : "")
-    })
+    // The coordinates for the bottom left cornor, used for the pathCap()
+    const baseCoordinates = convert(0, 0)
 
+    // Convert the x and y from the data into fitting coordinates for the path
+    let svgData = data.map(d => Object.assign({}, d, convert(d.x, d.y)))
+
+    // Calculates the d attribute for the path, you can pass in a cap to close it, or leave it as a line chart
+    let pathData = getPathLine(
+      svgData,
+      type === "area" ? pathCap(baseCoordinates.x, baseCoordinates.y) : ""
+    )
+
+    // Combine the styling and path data into an attributes package
+    let pathAttributes = Object.assign({}, styling, { d: pathData })
+
+    // Create the path element with the path attributes
     const path = createSvgElement("path", pathAttributes)
 
     container.appendChild(path)
 
-    // Return data transition functions
     return {
-      updateData: async _new => {
+      updateGraph: async _new => {
+        // Check if the _new data is the original but changed or entirely new data
         const alteredOriginal = _new.some(
           d =>
             Object.keys(d).includes("shift") || Object.keys(d).includes("push")
@@ -368,22 +386,33 @@
           ? equalizeChange(_new)
           : equalizeAll(data, _new)
 
-        // Transition all the data, no deleting
-        await dataTransition(transitionData, 20, _returnData => {
-          // Update the path
+        // Change this on window resize
 
-          path.setAttribute("d", getPathLine(convert(_returnData), pathCap()))
+        await dataTransition(transitionData, 100, _returnData => {
+          // Update the converter for the new data
+          let svgData = _returnData.map(d =>
+            Object.assign({}, d, convert(d.x, d.y, _returnData))
+          )
+
+          console.log(svgData)
+
+          let pathData = getPathLine(
+            svgData,
+            type === "area" ? pathCap(baseCoordinates.x, baseCoordinates.y) : ""
+          )
+
+          path.setAttribute("d", pathData)
         })
 
         // Replace the old with the new
-        data = cleanData(transitionData[1], "remove")
+        data = cleanData(transitionData[1], "remove", true)
 
         Promise.resolve()
       },
       addValue: (_value, _maxLength) => {
         let _data = [...data]
 
-        if (typeof _maxLength === "number" && data.length + 1 > _maxLength) {
+        if (typeof _maxLength === "number" && data.length + 1 >= _maxLength) {
           _data = data.map((d, i) =>
             i === 0 ? Object.assign({}, d, { shift: 1 }) : d
           )
@@ -419,22 +448,14 @@
     data: DATA
   })
 
-  // const _n = interactiveGraph.addValue(30, 5)
+  streamValues(newValues, 15)
 
-  // interactiveGraph.updateData(_n)
-
-  const newValues = [50, 20, 70, 40, 10, 80, 10, 30, 20]
-
-  // setInterval(() => newValues.push(Math.round(Math.random() * 90)), 500)
-
-  streamValues(newValues)
-
-  async function streamValues(_values, _maxLength = 9) {
+  async function streamValues(_values, _maxLength = undefined) {
     const value = _values.shift()
 
     const data = interactiveGraph.addValue(value, _maxLength)
 
-    await interactiveGraph.updateData(data)
+    await interactiveGraph.updateGraph(data)
 
     if (_values.length > 0) {
       return streamValues(_values, _maxLength)
