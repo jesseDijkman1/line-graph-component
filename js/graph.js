@@ -130,6 +130,7 @@
     return (
       _data.reduce((acc, d, i) => {
         // If the data object contains remove, the controlpoints need to be the same as the points
+
         const smoothing =
           0.15 * (d.curveFactor != undefined ? d.curveFactor : 1)
 
@@ -213,14 +214,13 @@
   function equalizeChange(_data) {
     const startData = _data.map((d, i) => {
       if ("push" in d) {
-        return Object.assign(
-          {},
-          {
-            x: _data[i - 1].x,
-            y: _data[i - 1].y,
-            id: d.id
-          }
-        )
+        return {
+          x: _data[i - 1].x,
+          y: _data[i - 1].y,
+          id: d.id,
+          curveFactor: 0.05
+          // Maybe add curvefactor = 0
+        }
       }
 
       if ("shift" in d) {
@@ -230,15 +230,22 @@
             x: d.x,
             y: d.y,
             id: d.id,
-            curveFactor: 1
+            curveFactor: 1,
+            remove: true
           }
         )
       }
 
-      if (i > 1) {
-        if ("shift" in _data[i - 1]) {
-          return Object.assign({}, d, { curveFactor: 1 })
-        }
+      if (i > 0 && "shift" in _data[i - 1]) {
+        return Object.assign(
+          {},
+          {
+            x: d.x,
+            y: d.y,
+            id: d.id,
+            curveFactor: 1
+          }
+        )
       }
 
       return d
@@ -287,6 +294,12 @@
             y: d.y + yCounter[d.id] * (_counter + 1)
           })
 
+          if ("curveFactor" in d) {
+            obj.curveFactor = Number(
+              Math.abs(obj.curveFactor - _counter / _steps).toFixed(3)
+            )
+          }
+
           return obj
         })
 
@@ -298,11 +311,12 @@
               outputData.map(d => {
                 const obj = Object.assign({}, d, {
                   x: Math.round(d.x),
-                  y: Math.round(d.y)
+                  y: Math.round(d.y),
+                  id: d.id
                 })
 
-                if ("curveFactor" in obj) {
-                  obj.curveFactor = 0
+                if ("curveFactor" in d) {
+                  obj.curveFactor = Math.round(obj.curveFactor)
                 }
 
                 return obj
@@ -322,19 +336,35 @@
 
   // ++++++++++++++++++++++++++++++++++++++
 
-  function cleanData(_data, _filterKey, _deleteObject) {
-    const cleanedData = _data.filter((d, i) => {
-      if (!("curveFactor" in d)) {
-        return Object.assign({}, d, { id: d.x })
-      }
-    })
+  function cleanData(_data, _filterKey, _deleteObject = false) {
+    let cleanedData
 
-    return cleanedData.map((d, i) => {
-      return Object.assign({}, d, { id: i })
-    })
+    if (!_deleteObject) {
+      cleanedData = _data.map(d => {
+        const obj = Object.assign({}, d)
+
+        if (_filterKey in obj) {
+          delete obj[_filterKey]
+        }
+        return obj
+      })
+    } else {
+      cleanedData = _data.filter((d, i) => {
+        if (!("curveFactor" in d)) {
+          return Object.assign({}, d, { id: d.x })
+        }
+      })
+    }
+
+    return cleanedData
+    // return rewriteIds(cleanedData)
   }
 
   // ++++++++++++++++++++++++++++++++++++++
+
+  function rewriteIds(_data) {
+    return _data.map((d, i) => Object.assign({}, d, { id: i }))
+  }
 
   const pathCap = (_x, _y) => `V${_y} H${_x} Z`
 
@@ -390,11 +420,11 @@
 
         await dataTransition(transitionData, 100, _returnData => {
           // Update the converter for the new data
+
+          console.log(_returnData)
           let svgData = _returnData.map(d =>
             Object.assign({}, d, convert(d.x, d.y, _returnData))
           )
-
-          console.log(svgData)
 
           let pathData = getPathLine(
             svgData,
@@ -405,9 +435,13 @@
         })
 
         // Replace the old with the new
-        data = cleanData(transitionData[1], "remove", true)
+        data = cleanData(transitionData[1], "push", false)
 
-        Promise.resolve()
+        data = cleanData(data, "remove", true)
+
+        data = rewriteIds(data)
+
+        return Promise.resolve()
       },
       addValue: (_value, _maxLength) => {
         let _data = [...data]
@@ -448,7 +482,11 @@
     data: DATA
   })
 
-  streamValues(newValues, 15)
+  // interactiveGraph.updateGraph(DATA2)
+  streamValues(newValues, 11)
+
+  // const __data = interactiveGraph.addValue(40, 11)
+  // interactiveGraph.updateGraph(__data)
 
   async function streamValues(_values, _maxLength = undefined) {
     const value = _values.shift()
