@@ -214,55 +214,31 @@
   function equalizeChange(_data) {
     const startData = _data.map((d, i) => {
       if ("push" in d) {
-        return {
+        return Object.assign({}, d, {
           x: _data[i - 1].x,
           y: _data[i - 1].y,
-          id: d.id,
           curveFactor: 0.05
-          // Maybe add curvefactor = 0
-        }
+        })
       }
 
       if ("shift" in d) {
-        return Object.assign(
-          {},
-          {
-            x: d.x,
-            y: d.y,
-            id: d.id,
-            curveFactor: 1,
-            remove: true
-          }
-        )
-      }
-
-      if (i > 0 && "shift" in _data[i - 1]) {
-        return Object.assign(
-          {},
-          {
-            x: d.x,
-            y: d.y,
-            id: d.id,
-            curveFactor: 1
-          }
-        )
+        return Object.assign({}, d, { curveFactor: 1 })
       }
 
       return d
     })
 
     const endData = _data.map((d, i) => {
-      if ("shift" in d) {
-        return Object.assign(
-          {},
-          { x: d.x, y: _data[i + 1].y, id: d.id, curveFactor: 1 }
-        )
+      if ("shift" in d && "remove" in d) {
+        return Object.assign({}, d, {
+          x: d.x,
+          y: _data[i + 1].y,
+          id: d.id,
+          curveFactor: 1
+        })
       }
 
-      if (_data.some(d => Object.keys(d).includes("shift"))) {
-        return Object.assign({}, { x: d.x - 1, y: d.y, id: d.id })
-      }
-      return d
+      return Object.assign({}, d, { x: d.x - 1, y: d.y, id: d.id })
     })
 
     return [startData, endData]
@@ -405,8 +381,27 @@
     container.appendChild(path)
 
     return {
-      updateGraph: async _new => {
+      updateGraph: async (_new, _maxLength) => {
         // Check if the _new data is the original but changed or entirely new data
+
+        // if (typeof _maxLength === "number" && data.length + 1 >= _maxLength) {
+        //   _new = _new.map((d, i) =>
+        //     i <= 1 ? Object.assign({}, d, { shift: true }) : d
+        //   )
+        // }
+
+        if (typeof _maxLength === "number" && data.length + 1 >= _maxLength) {
+          _new = _new.map((d, i) => {
+            if (i === 0) {
+              return Object.assign({}, d, { shift: true, remove: true })
+            } else if (i === 1) {
+              return Object.assign({}, d, { shift: true })
+            }
+
+            return d
+          })
+        }
+
         const alteredOriginal = _new.some(
           d =>
             Object.keys(d).includes("shift") || Object.keys(d).includes("push")
@@ -421,7 +416,6 @@
         await dataTransition(transitionData, 100, _returnData => {
           // Update the converter for the new data
 
-          console.log(_returnData)
           let svgData = _returnData.map(d =>
             Object.assign({}, d, convert(d.x, d.y, _returnData))
           )
@@ -443,26 +437,13 @@
 
         return Promise.resolve()
       },
-      addValue: (_value, _maxLength) => {
-        let _data = [...data]
-
-        if (typeof _maxLength === "number" && data.length + 1 >= _maxLength) {
-          _data = data.map((d, i) =>
-            i === 0 ? Object.assign({}, d, { shift: 1 }) : d
-          )
-        }
-
-        const obj = Object.assign({}, data[data.length - 1], {
+      addValue: _value =>
+        [...data].concat({
           x: data.length,
           y: _value,
           id: data.length,
-          push: 0
+          push: true
         })
-
-        _data.push(obj)
-
-        return _data
-      }
     }
   }
 
@@ -491,9 +472,9 @@
   async function streamValues(_values, _maxLength = undefined) {
     const value = _values.shift()
 
-    const data = interactiveGraph.addValue(value, _maxLength)
+    const data = interactiveGraph.addValue(value)
 
-    await interactiveGraph.updateGraph(data)
+    await interactiveGraph.updateGraph(data, _maxLength)
 
     if (_values.length > 0) {
       return streamValues(_values, _maxLength)
