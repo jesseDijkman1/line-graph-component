@@ -1,0 +1,25 @@
+{
+  "name": "line-graph-component",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "dependencies": {},
+  "devDependencies": {
+    "html-webpack-plugin": "^4.3.0",
+    "webpack": "^4.43.0"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jesseDijkman1/line-graph-component.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/jesseDijkman1/line-graph-component/issues"
+  },
+  "homepage": "https://github.com/jesseDijkman1/line-graph-component#readme"
+}
