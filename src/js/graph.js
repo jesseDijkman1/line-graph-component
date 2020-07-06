@@ -1,102 +1,211 @@
-// Utils
-function createVector(x, y) {
-  return { x, y }
-}
+import {
+  scaler,
+  normalizer,
+  getPathData,
+  createVector,
+  getRandomNumbers,
+  getSvgDimensions,
+  createPath,
+  difference,
+  plus,
+  times,
+} from "./utils"
 
-function svgDimensions(svg) {
-  console.log("yes", svg, svg instanceof Element)
-  const css = getComputedStyle(svg)
+class Graph {
+  static defaultOptions() {
+    return {
+      padding: [0, 0, 0, 0],
+      stroke: "black",
+      fill: "black",
+    }
+  }
 
-  return {
-    width: Number(css.width.replace("px", "")),
-    height: Number(css.height.replace("px", "")),
+  constructor(svg, _options) {
+    this.svg = svg
+    this.options = { ...Graph.defaultOptions(), ..._options }
+
+    this.currentVectors = null
+
+    this.path = null
+    this.width = 0
+    this.height = 0
+    this.scaleX = 0
+    this.scaleY = 0
+
+    this.paddingTop =
+      typeof this.options.padding[0] != "number" ? 0 : this.options.padding[0]
+    this.paddingRight =
+      typeof this.options.padding[1] != "number"
+        ? this.paddingTop
+        : this.options.padding[1]
+    this.paddingBottom =
+      typeof this.options.padding[2] != "number"
+        ? this.paddingTop
+        : this.options.padding[2]
+    this.paddingLeft =
+      typeof this.options.padding[3] != "number"
+        ? this.paddingRight
+        : this.options.padding[3]
+
+    this.stroke = this.options.stroke
+    this.fill = this.options.fill
+
+    this.init()
+  }
+
+  init() {
+    this.setSize()
+    this.setScale()
+  }
+
+  createPath(pathData) {
+    this.path = createPath({
+      d: pathData,
+      stroke: this.stroke,
+      fill: this.fill,
+    })
+
+    this.svg.appendChild(this.path)
+  }
+
+  updatePath(pathData) {
+    this.path.setAttribute("d", pathData)
+  }
+
+  setSize() {
+    // Set the dimensions of the graph minus the padding
+    const { width, height } = getSvgDimensions(this.svg)
+
+    this.width = width - (this.paddingLeft + this.paddingRight)
+    this.height = height - (this.paddingTop + this.paddingBottom)
+  }
+
+  setScale() {
+    this.scaleX = scaler(0, this.width)
+    this.scaleY = scaler(0, this.height)
+  }
+
+  scale(normalizedVectors) {
+    return normalizedVectors.map(({ x, y }) => ({
+      x: this.scaleX(x) + this.paddingLeft,
+      y: this.scaleY(y) + this.paddingTop,
+    }))
+  }
+
+  normalize(vectorsArray) {
+    const { xValues, yValues } = this.splitVectors(vectorsArray)
+
+    const normalizeX = normalizer(Math.min(...xValues), Math.max(...xValues))
+    const normalizeY = normalizer(Math.min(...yValues), Math.max(...yValues))
+
+    return vectorsArray.map(({ x, y }) => ({
+      x: normalizeX(x),
+      y: normalizeY(y),
+    }))
+  }
+
+  splitVectors(vectorsArray) {
+    return {
+      xValues: vectorsArray.map(({ x }) => x),
+      yValues: vectorsArray.map(({ y }) => y),
+    }
+  }
+
+  transformVectors(vectorsArray) {
+    const normalizedVectors = this.normalize(vectorsArray)
+    return [
+      {
+        x: 0 + this.paddingLeft,
+        y: this.height + this.paddingTop,
+      },
+      ...this.scale(normalizedVectors),
+      {
+        x: this.width + this.paddingLeft,
+        y: this.height + this.paddingTop,
+      },
+    ]
+  }
+
+  transition(vectorsArray, _steps = 60) {
+    if (!this.currentVectors) return
+
+    let steps = 0
+
+    const oldVectors = this.currentVectors
+    const newVectors = this.transformVectors(vectorsArray)
+
+    const differentialVectors = newVectors.map((vector, index) => {
+      const { x, y } = difference(vector, oldVectors[index])
+
+      return { x: x / _steps, y: y / _steps }
+    })
+
+    function frames(...args) {
+      if (steps >= _steps) return
+
+      steps += 1
+
+      requestAnimationFrame(frames.bind(this))
+
+      const transitionVectors = oldVectors.map((oldVector, index) => {
+        const { x, y } = plus(
+          oldVector,
+          times(differentialVectors[index], steps)
+        )
+
+        return { x, y }
+      })
+
+      this.currentVectors = transitionVectors
+
+      const pathData = getPathData(transitionVectors)
+
+      this.updatePath(pathData)
+    }
+
+    frames.call(this)
+  }
+
+  draw() {}
+
+  update(vectorsArray) {
+    const transformedVectors = this.transformVectors(vectorsArray)
+
+    // Store final data for possible transitions
+    this.currentVectors = transformedVectors
+
+    const pathData = getPathData(transformedVectors)
+
+    if (!this.path) return this.createPath(pathData)
+
+    this.updatePath(pathData)
   }
 }
 
-function getPathData(points) {
-  return points.reduce((acc, [x, y], index) => {
-    if (index == 0) return `M${x} ${y}`
-    else if (index == points.length - 1) return `${acc}, L${x} ${y}`
-    else return `${acc}, L${x} ${y}`
-  }, "")
-}
-
-function createPath({ d, stroke, fill }) {
-  const path = document.createElementNS("http://www.w3.org/2000/svg", "path")
-
-  path.setAttributeNS(null, "d", d)
-  path.setAttributeNS(null, "stroke", stroke)
-  path.setAttributeNS(null, "fill", fill)
-
-  return path
-}
-
-function scaler(min, max) {
-  return (val) => val * (max - min) + min
-}
-
-function normalizer(min, max) {
-  return (value) => (value - min) / (max - min)
-}
-
-const TEST_DATA = [
-  [0, 90],
-  [1, 30],
-  [2, 10],
-  [3, 50],
-  [4, 20],
-]
-
 // Init
 void (function () {
+  const vectorPoints = getRandomNumbers(100, 40).map((num, index) =>
+    createVector(index, num)
+  )
+  const vectorPoints2 = getRandomNumbers(100, 40).map((num, index) =>
+    createVector(index, num)
+  )
+
   const svgGraph = document.querySelector("svg")
 
-  console.log(svgGraph)
-  const { width, height } = svgDimensions(svgGraph)
-
-  // Create scalers
-  const scaleX = scaler(0, width)
-  const scaleY = scaler(0, height)
-
-  // Get seperate x and y array
-  const xValues = TEST_DATA.map((points) => points[0])
-  const yValues = TEST_DATA.map((points) => points[1])
-
-  // Create normalize functions
-  const normalizeX = normalizer(Math.min(...xValues), Math.max(...xValues))
-  const normalizeY = normalizer(Math.min(...yValues), Math.max(...yValues))
-
-  // Normalize original data
-  const normalizedPointArrays = TEST_DATA.map(([x, y]) => [
-    normalizeX(x),
-    normalizeY(y),
-  ])
-
-  // console.log(normalizedPointArrays)
-
-  // Points scaled for svg dimensions
-  const scaledPointArrays = normalizedPointArrays.map(([x, y]) => [
-    scaleX(x),
-    scaleY(y),
-  ])
-
-  const pathData = getPathData(scaledPointArrays)
-
-  const path = createPath({
-    d: pathData,
-    stroke: "red",
-    fill: "none",
+  const graph = new Graph(svgGraph, {
+    padding: [50, 0, 0, 0],
   })
 
-  svgGraph.appendChild(path)
+  graph.update(vectorPoints)
 
-  // const scaleX = createScale(0, max)
+  window.onclick = () => {
+    graph.transition(
+      getRandomNumbers(100, 40).map((num, index) => createVector(index, num))
+    )
+  }
 
-  // Creates array with x as the array index ( [[0, y], [1, y], [2, y]] )
-  // const rawPointsArray = TEST_DATA.map((number, i) => [i, number])
-  // const scaledPointsArray
+  window.onresize = () => {
+    graph.init()
+  }
 })()
-
-exports.default = function () {
-  console.log("test")
-}
