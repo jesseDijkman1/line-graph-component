@@ -6,29 +6,31 @@ function normalizer(min, max) {
   return (value) => (value - min) / (max - min)
 }
 
-// Vector Helpers
-function createVector(x, y) {
-  return { x, y }
-}
-
-function difference(v1, v2) {
-  return {
-    x: v1.x - v2.x,
-    y: v1.y - v2.y,
+class Vector {
+  static minus(vector1, vector2) {
+    return {
+      x: vector1.x - vector2.x,
+      y: vector1.y - vector2.y,
+    }
   }
-}
 
-function plus(v1, v2) {
-  return {
-    x: v1.x + v2.x,
-    y: v1.y + v2.y,
+  static plus(vector1, vector2) {
+    return {
+      x: vector1.x + vector2.x,
+      y: vector1.y + vector2.y,
+    }
   }
-}
 
-function times(vector, num) {
-  return {
-    x: vector.x * num,
-    y: vector.y * num,
+  static multiply(vector, num) {
+    return {
+      x: vector.x * num,
+      y: vector.y * num,
+    }
+  }
+
+  constructor(x, y) {
+    this.x = x
+    this.y = y
   }
 }
 
@@ -67,15 +69,35 @@ function getRandomNumbers(max, amount, round = true) {
     )
 }
 
+function animate() {
+  let id
+
+  return function (cb) {
+    if (id) cancelAnimationFrame(id)
+
+    function frames() {
+      const stop = !!cb() // Should return true when done
+
+      if (stop == true) return (id = null)
+
+      id = requestAnimationFrame(frames)
+    }
+
+    id = requestAnimationFrame(frames)
+  }
+}
+
 export {
   scaler,
-  plus,
-  difference,
+  Vector,
+  // plus,
+  // difference,
   getRandomNumbers,
   normalizer,
-  createVector,
+  // createVector,
   getSvgDimensions,
   getPathData,
-  times,
+  // times,
   createPath,
+  animate,
 }

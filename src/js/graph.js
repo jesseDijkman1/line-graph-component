@@ -2,15 +2,14 @@ import {
   scaler,
   normalizer,
   getPathData,
-  createVector,
   getRandomNumbers,
   getSvgDimensions,
+  animate,
   createPath,
-  difference,
-  plus,
-  times,
+  Vector,
 } from "./utils"
 
+// Source: https://gist.github.com/gre/1650294
 const EasingFunctions = {
   // no easing, no acceleration
   linear: (t) => t,
@@ -46,6 +45,8 @@ class Graph {
     this.options = { ...Graph.defaultOptions(), ..._options }
 
     this.currentVectors = null
+
+    this.animate = animate()
 
     this.path = null
     this.width = 0
@@ -126,20 +127,20 @@ class Graph {
   }
 
   splitVectors(vectorsArray) {
+    // Returns the X and Y values seperately
     return {
       xValues: vectorsArray.map(({ x }) => x),
       yValues: vectorsArray.map(({ y }) => y),
     }
   }
 
-  transformVectors(vectorsArray) {
-    const normalizedVectors = this.normalize(vectorsArray)
+  closeVectors(vectorsArray) {
     return [
       {
         x: 0 + this.paddingLeft,
         y: this.height + this.paddingTop,
       },
-      ...this.scale(normalizedVectors),
+      ...vectorsArray,
       {
         x: this.width + this.paddingLeft,
         y: this.height + this.paddingTop,
@@ -147,59 +148,97 @@ class Graph {
     ]
   }
 
-  transition(vectorsArray, _steps = 60) {
-    if (!this.currentVectors) return
+  transformVectors(vectorsArray) {
+    const normalizedVectors = this.normalize(vectorsArray)
+    const scaledVectors = this.scale(normalizedVectors)
 
-    let steps = 0
+    return scaledVectors
+  }
 
-    const normalize = normalizer(0, 60)
+  equalizeArrayLengths(currentVectorsArray, newVectorsArray) {
+    const lengthDifference = Math.abs(
+      currentVectorsArray.length - newVectorsArray.length
+    )
 
-    const oldVectors = this.currentVectors
-    const newVectors = this.transformVectors(vectorsArray)
+    if (lengthDifference == 0) {
+      return [currentVectorsArray, newVectorsArray]
+    }
 
-    const differentialVectors = newVectors.map((vector, index) => {
-      const { x, y } = difference(vector, oldVectors[index])
-      return { x, y }
-    })
+    const fillers = new Array(lengthDifference)
 
-    function frames(...args) {
-      if (steps >= _steps) return
+    if (currentVectorsArray.length < newVectorsArray.length) {
+      const adjusted = [
+        ...currentVectorsArray,
+        ...fillers.fill(currentVectorsArray[currentVectorsArray.length - 1]),
+      ]
 
-      steps += 1
+      return [adjusted, newVectorsArray]
+    } else {
+      const adjusted = [
+        ...newVectorsArray,
+        ...fillers.fill(newVectorsArray[newVectorsArray.length - 1]),
+      ]
 
-      requestAnimationFrame(frames.bind(this))
+      return [currentVectorsArray, adjusted]
+    }
+  }
 
-      const transitionVectors = oldVectors.map((oldVector, index) => {
-        const { x, y } = plus(
+  transition(vectorsArray, steps = 60) {
+    let stepsTaken = 0
+
+    const normalize = normalizer(0, steps)
+
+    const transformedVectors = this.transformVectors(vectorsArray)
+
+    const [currentVectors, newVectors] = this.equalizeArrayLengths(
+      this.currentVectors,
+      transformedVectors
+    )
+
+    const differentialVectors = newVectors.map((vector, index) =>
+      Vector.minus(vector, currentVectors[index])
+    )
+
+    this.animate(() => {
+      if (stepsTaken >= steps) {
+        this.currentVectors = transformedVectors
+        return true
+      }
+
+      stepsTaken++
+
+      const transitionVectors = currentVectors.map((oldVector, index) =>
+        Vector.plus(
           oldVector,
-          times(
+          Vector.multiply(
             differentialVectors[index],
-            EasingFunctions.easeInOutCubic(normalize(steps))
+            EasingFunctions.easeInOutCubic(normalize(stepsTaken))
           )
         )
-
-        return { x, y }
-      })
+      )
 
       this.currentVectors = transitionVectors
 
-      const pathData = getPathData(transitionVectors)
+      this.draw()
+    })
 
-      this.updatePath(pathData)
-    }
-
-    frames.call(this)
+    console.log(this.currentVectors)
   }
-
-  draw() {}
 
   update(vectorsArray) {
     const transformedVectors = this.transformVectors(vectorsArray)
 
-    // Store final data for possible transitions
     this.currentVectors = transformedVectors
 
-    const pathData = getPathData(transformedVectors)
+    this.draw()
+  }
+
+  draw() {
+    const pathData = getPathData(
+      this.fill != false
+        ? this.closeVectors(this.currentVectors)
+        : this.currentVectors
+    )
 
     if (!this.path) return this.createPath(pathData)
 
@@ -209,11 +248,8 @@ class Graph {
 
 // Init
 void (function () {
-  const vectorPoints = getRandomNumbers(100, 40).map((num, index) =>
-    createVector(index, num)
-  )
-  const vectorPoints2 = getRandomNumbers(100, 40).map((num, index) =>
-    createVector(index, num)
+  const vectorPoints = getRandomNumbers(100, 30).map(
+    (num, index) => new Vector(index, num)
   )
 
   const svgGraph = document.querySelector("svg")
@@ -224,13 +260,16 @@ void (function () {
 
   graph.update(vectorPoints)
 
-  window.onclick = () => {
+  document.body.onclick = () => {
     graph.transition(
-      getRandomNumbers(100, 40).map((num, index) => createVector(index, num))
+      getRandomNumbers(100, Math.round(Math.random() * 25 + 25)).map(
+        (num, index) => new Vector(index, num)
+      )
     )
   }
 
   window.onresize = () => {
     graph.init()
+    graph.update(graph.currentVectors)
   }
 })()
