@@ -164,19 +164,24 @@ class Graph {
       return [currentVectorsArray, newVectorsArray]
     }
 
-    const fillers = new Array(lengthDifference)
+    const fillersLeft = new Array(Math.floor(lengthDifference / 2))
+    const fillersRight = new Array(Math.ceil(lengthDifference / 2))
 
     if (currentVectorsArray.length < newVectorsArray.length) {
       const adjusted = [
+        ...fillersLeft.fill(currentVectorsArray[0]),
         ...currentVectorsArray,
-        ...fillers.fill(currentVectorsArray[currentVectorsArray.length - 1]),
+        ...fillersRight.fill(
+          currentVectorsArray[currentVectorsArray.length - 1]
+        ),
       ]
 
       return [adjusted, newVectorsArray]
     } else {
       const adjusted = [
+        ...fillersLeft.fill(newVectorsArray[0]),
         ...newVectorsArray,
-        ...fillers.fill(newVectorsArray[newVectorsArray.length - 1]),
+        ...fillersRight.fill(newVectorsArray[newVectorsArray.length - 1]),
       ]
 
       return [currentVectorsArray, adjusted]
@@ -255,7 +260,7 @@ void (function () {
   const svgGraph = document.querySelector("svg")
 
   const graph = new Graph(svgGraph, {
-    padding: [50, 0, 0, 0],
+    padding: [50, 0, 0],
   })
 
   graph.update(vectorPoints)
