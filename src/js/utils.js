@@ -61,11 +61,11 @@ function createPath({ d, stroke, fill }) {
   return path
 }
 
-function getRandomNumbers(max, amount, round = true) {
+function getRandomNumbers(max, amount, round = false) {
   return new Array(amount)
     .fill(max)
     .map((m) =>
-      round == true ? Math.random() * m : Math.round(Math.random() * m)
+      round == false ? Math.random() * m : Math.round(Math.random() * m)
     )
 }
 

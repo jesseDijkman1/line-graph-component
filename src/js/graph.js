@@ -44,7 +44,8 @@ class Graph {
     this.svg = svg
     this.options = { ...Graph.defaultOptions(), ..._options }
 
-    this.currentVectors = null
+    this.currentVectors = []
+    this.currentVectorsRaw = []
 
     this.animate = animate()
 
@@ -164,14 +165,15 @@ class Graph {
       return [currentVectorsArray, newVectorsArray]
     }
 
-    const fillersLeft = new Array(Math.floor(lengthDifference / 2))
-    const fillersRight = new Array(Math.ceil(lengthDifference / 2))
+    const emptyfillers = new Array(lengthDifference)
+    // const fillersLeft = new Array(Math.floor(lengthDifference))
+    // const fillersRight = new Array(Math.ceil(lengthDifference))
 
     if (currentVectorsArray.length < newVectorsArray.length) {
       const adjusted = [
-        ...fillersLeft.fill(currentVectorsArray[0]),
+        // ...fillersLeft.fill(currentVectorsArray[0]),
         ...currentVectorsArray,
-        ...fillersRight.fill(
+        ...emptyfillers.fill(
           currentVectorsArray[currentVectorsArray.length - 1]
         ),
       ]
@@ -179,9 +181,9 @@ class Graph {
       return [adjusted, newVectorsArray]
     } else {
       const adjusted = [
-        ...fillersLeft.fill(newVectorsArray[0]),
+        ...emptyfillers.fill(newVectorsArray[0]),
         ...newVectorsArray,
-        ...fillersRight.fill(newVectorsArray[newVectorsArray.length - 1]),
+        // ...fillersRight.fill(newVectorsArray[newVectorsArray.length - 1]),
       ]
 
       return [currentVectorsArray, adjusted]
@@ -217,22 +219,41 @@ class Graph {
           oldVector,
           Vector.multiply(
             differentialVectors[index],
-            EasingFunctions.easeInOutCubic(normalize(stepsTaken))
+            EasingFunctions.linear(normalize(stepsTaken))
           )
         )
       )
 
+      this.currentVectorsRaw = vectorsArray
       this.currentVectors = transitionVectors
 
       this.draw()
     })
-
-    console.log(this.currentVectors)
   }
+
+  push(...vectors) {
+    // const vectors = [_vectors]
+    this.currentVectorsRaw = [...this.currentVectorsRaw, ...vectors].flat()
+    // console.log(this.currentVectorsRaw, vectors, typeof vectors)
+
+    this.transition(this.currentVectorsRaw)
+
+    // this.draw()
+  }
+
+  shift() {
+    console.log(this.currentVectorsRaw, this.currentVectors)
+    this.currentVectorsRaw.shift()
+
+    this.transition(this.currentVectorsRaw)
+  }
+
+  unshift() {}
 
   update(vectorsArray) {
     const transformedVectors = this.transformVectors(vectorsArray)
 
+    this.currentVectorsRaw = vectorsArray
     this.currentVectors = transformedVectors
 
     this.draw()
@@ -266,11 +287,43 @@ void (function () {
   graph.update(vectorPoints)
 
   document.body.onclick = () => {
-    graph.transition(
-      getRandomNumbers(100, Math.round(Math.random() * 25 + 25)).map(
-        (num, index) => new Vector(index, num)
-      )
-    )
+    graph.shift()
+    // for (let i = 0; i < 10; i++) {
+    graph.push([
+      new Vector(
+        graph.currentVectorsRaw[graph.currentVectorsRaw.length - 1].x + 1,
+        Math.random() * 25 + 25
+      ),
+    ])
+    // }
+
+    // graph.push([
+    //   new Vector(graph.currentVectors.length, Math.random() * 25 + 25),
+    // ])
+    // graph.push([
+    //   new Vector(graph.currentVectors.length, Math.random() * 25 + 25),
+    // ])
+    // graph.push([
+    //   new Vector(graph.currentVectors.length, Math.random() * 25 + 25),
+    // ])
+    // graph.push([
+    //   new Vector(graph.currentVectors.length, Math.random() * 25 + 25),
+    // ])
+    // graph.push([
+    //   new Vector(graph.currentVectors.length, Math.random() * 25 + 25),
+    // ])
+    // graph.push([
+    //   new Vector(graph.currentVectors.length, Math.random() * 25 + 25),
+    // ])
+    // graph.push([
+    //   new Vector(graph.currentVectors.length, Math.random() * 25 + 25),
+    // ])
+
+    // graph.transition(
+    //   getRandomNumbers(100, Math.round(Math.random() * 25 + 25)).map(
+    //     (num, index) => new Vector(index, num)
+    //   )
+    // )
   }
 
   window.onresize = () => {
